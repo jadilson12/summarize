@@ -1,12 +1,12 @@
-import { fetchWithTimeout } from '../../../fetch-with-timeout.js';
-import { normalizeApifyTranscript } from '../../normalize.js';
-import { isRecord } from '../../utils.js';
+import { fetchWithTimeout } from '../../../fetch-with-timeout.js'
+import { normalizeApifyTranscript } from '../../normalize.js'
+import { isRecord } from '../../utils.js'
 
 type ApifyTranscriptItem = Record<string, unknown> & {
-  transcript?: unknown;
-  transcriptText?: unknown;
-  text?: unknown;
-};
+  transcript?: unknown
+  transcriptText?: unknown
+  text?: unknown
+}
 
 export const fetchTranscriptWithApify = async (
   fetchImpl: typeof fetch,
@@ -14,7 +14,7 @@ export const fetchTranscriptWithApify = async (
   url: string
 ): Promise<string | null> => {
   if (!apifyApiToken) {
-    return null;
+    return null
   }
 
   try {
@@ -30,33 +30,33 @@ export const fetchTranscriptWithApify = async (
         }),
       },
       45_000
-    );
+    )
 
     if (!response.ok) {
-      return null;
+      return null
     }
 
-    const payload = await response.json();
+    const payload = await response.json()
     if (!Array.isArray(payload)) {
-      return null;
+      return null
     }
 
     for (const item of payload) {
       if (!isRecord(item)) {
-        continue;
+        continue
       }
-      const recordItem = item as ApifyTranscriptItem;
+      const recordItem = item as ApifyTranscriptItem
       const normalized =
         normalizeApifyTranscript(recordItem.transcript) ??
         normalizeApifyTranscript(recordItem.transcriptText) ??
-        normalizeApifyTranscript(recordItem.text);
+        normalizeApifyTranscript(recordItem.text)
       if (normalized) {
-        return normalized;
+        return normalized
       }
     }
 
-    return null;
+    return null
   } catch {
-    return null;
+    return null
   }
-};
+}

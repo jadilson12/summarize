@@ -1,5 +1,5 @@
-import type { CacheMode, TranscriptDiagnostics } from '../types.js';
-import { applyContentBudget, normalizeCandidate, normalizeForPrompt } from './cleaner.js';
+import type { CacheMode, TranscriptDiagnostics } from '../types.js'
+import { applyContentBudget, normalizeCandidate, normalizeForPrompt } from './cleaner.js'
 import {
   DEFAULT_CACHE_MODE,
   DEFAULT_MAX_CONTENT_CHARACTERS,
@@ -7,76 +7,76 @@ import {
   type FetchLinkContentOptions,
   type FinalizationArguments,
   type TranscriptResolution,
-} from './types.js';
+} from './types.js'
 
-const WWW_PREFIX_PATTERN = /^www\./i;
-const TRANSCRIPT_LINE_SPLIT_PATTERN = /\r?\n/;
+const WWW_PREFIX_PATTERN = /^www\./i
+const TRANSCRIPT_LINE_SPLIT_PATTERN = /\r?\n/
 
 export function resolveCacheMode(options?: FetchLinkContentOptions): CacheMode {
-  return options?.cacheMode ?? DEFAULT_CACHE_MODE;
+  return options?.cacheMode ?? DEFAULT_CACHE_MODE
 }
 
 export function resolveMaxCharacters(options?: FetchLinkContentOptions): number {
-  const candidate = options?.maxCharacters;
+  const candidate = options?.maxCharacters
   if (typeof candidate !== 'number' || !Number.isFinite(candidate)) {
-    return DEFAULT_MAX_CONTENT_CHARACTERS;
+    return DEFAULT_MAX_CONTENT_CHARACTERS
   }
   if (candidate <= DEFAULT_MAX_CONTENT_CHARACTERS) {
-    return DEFAULT_MAX_CONTENT_CHARACTERS;
+    return DEFAULT_MAX_CONTENT_CHARACTERS
   }
-  return Math.floor(candidate);
+  return Math.floor(candidate)
 }
 
 export function appendNote(existing: string | null | undefined, next: string): string {
   if (!next) {
-    return existing ?? '';
+    return existing ?? ''
   }
   if (!existing || existing.length === 0) {
-    return next;
+    return next
   }
-  return `${existing}; ${next}`;
+  return `${existing}; ${next}`
 }
 
 export function safeHostname(rawUrl: string): string | null {
   try {
-    return new URL(rawUrl).hostname.replace(WWW_PREFIX_PATTERN, '');
+    return new URL(rawUrl).hostname.replace(WWW_PREFIX_PATTERN, '')
   } catch {
-    return null;
+    return null
   }
 }
 
 export function pickFirstText(candidates: Array<string | null | undefined>): string | null {
   for (const candidate of candidates) {
-    const normalized = normalizeCandidate(candidate);
+    const normalized = normalizeCandidate(candidate)
     if (normalized) {
-      return normalized;
+      return normalized
     }
   }
-  return null;
+  return null
 }
 
 export function selectBaseContent(sourceContent: string, transcriptText: string | null): string {
   if (!transcriptText) {
-    return sourceContent;
+    return sourceContent
   }
-  const normalizedTranscript = normalizeForPrompt(transcriptText);
+  const normalizedTranscript = normalizeForPrompt(transcriptText)
   if (normalizedTranscript.length === 0) {
-    return sourceContent;
+    return sourceContent
   }
-  return `Transcript:\n${normalizedTranscript}`;
+  return `Transcript:\n${normalizedTranscript}`
 }
 
 export function summarizeTranscript(transcriptText: string | null) {
   if (!transcriptText) {
-    return { transcriptCharacters: null, transcriptLines: null };
+    return { transcriptCharacters: null, transcriptLines: null }
   }
-  const transcriptCharacters = transcriptText.length > 0 ? transcriptText.length : null;
+  const transcriptCharacters = transcriptText.length > 0 ? transcriptText.length : null
   const transcriptLinesRaw = transcriptText
     .split(TRANSCRIPT_LINE_SPLIT_PATTERN)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0).length;
-  const transcriptLines = transcriptLinesRaw > 0 ? transcriptLinesRaw : null;
-  return { transcriptCharacters, transcriptLines };
+    .filter((line) => line.length > 0).length
+  const transcriptLines = transcriptLinesRaw > 0 ? transcriptLinesRaw : null
+  return { transcriptCharacters, transcriptLines }
 }
 
 export function ensureTranscriptDiagnostics(
@@ -84,14 +84,14 @@ export function ensureTranscriptDiagnostics(
   cacheMode: CacheMode
 ): TranscriptDiagnostics {
   if (resolution.diagnostics) {
-    return resolution.diagnostics;
+    return resolution.diagnostics
   }
-  const hasText = typeof resolution.text === 'string' && resolution.text.length > 0;
-  let cacheStatus: TranscriptDiagnostics['cacheStatus'] = 'unknown';
+  const hasText = typeof resolution.text === 'string' && resolution.text.length > 0
+  let cacheStatus: TranscriptDiagnostics['cacheStatus'] = 'unknown'
   if (cacheMode === 'bypass') {
-    cacheStatus = 'bypassed';
+    cacheStatus = 'bypassed'
   } else if (hasText) {
-    cacheStatus = 'miss';
+    cacheStatus = 'miss'
   }
   return {
     cacheMode,
@@ -99,7 +99,7 @@ export function ensureTranscriptDiagnostics(
     textProvided: hasText,
     provider: resolution.source,
     attemptedProviders: resolution.source ? [resolution.source] : [],
-  };
+  }
 }
 
 export function finalizeExtractedLinkContent({
@@ -112,8 +112,11 @@ export function finalizeExtractedLinkContent({
   transcriptResolution,
   diagnostics,
 }: FinalizationArguments): ExtractedLinkContent {
-  const { content, truncated, totalCharacters, wordCount } = applyContentBudget(baseContent, maxCharacters);
-  const { transcriptCharacters, transcriptLines } = summarizeTranscript(transcriptResolution.text);
+  const { content, truncated, totalCharacters, wordCount } = applyContentBudget(
+    baseContent,
+    maxCharacters
+  )
+  const { transcriptCharacters, transcriptLines } = summarizeTranscript(transcriptResolution.text)
 
   return {
     url,
@@ -128,5 +131,5 @@ export function finalizeExtractedLinkContent({
     transcriptLines,
     transcriptSource: transcriptResolution.source,
     diagnostics,
-  };
+  }
 }

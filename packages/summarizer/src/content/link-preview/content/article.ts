@@ -1,17 +1,17 @@
-import { load } from 'cheerio';
-import sanitizeHtml from 'sanitize-html';
+import { load } from 'cheerio'
+import sanitizeHtml from 'sanitize-html'
 
-import { decodeHtmlEntities, normalizeWhitespace } from './cleaner.js';
+import { decodeHtmlEntities, normalizeWhitespace } from './cleaner.js'
 
-const MIN_SEGMENT_LENGTH = 30;
+const MIN_SEGMENT_LENGTH = 30
 
 export function extractArticleContent(html: string): string {
-  const segments = collectSegmentsFromHtml(html);
+  const segments = collectSegmentsFromHtml(html)
   if (segments.length > 0) {
-    return segments.join('\n');
+    return segments.join('\n')
   }
-  const fallback = normalizeWhitespace(extractPlainText(html));
-  return fallback ?? '';
+  const fallback = normalizeWhitespace(extractPlainText(html))
+  return fallback ?? ''
 }
 
 export function collectSegmentsFromHtml(html: string): string[] {
@@ -39,72 +39,82 @@ export function collectSegmentsFromHtml(html: string): string[] {
       'br',
     ],
     allowedAttributes: {},
-    nonTextTags: ['style', 'script', 'noscript', 'template', 'svg', 'canvas', 'iframe', 'object', 'embed'],
+    nonTextTags: [
+      'style',
+      'script',
+      'noscript',
+      'template',
+      'svg',
+      'canvas',
+      'iframe',
+      'object',
+      'embed',
+    ],
     textFilter(text: string) {
-      return decodeHtmlEntities(text);
+      return decodeHtmlEntities(text)
     },
-  });
+  })
 
-  const $ = load(sanitized);
-  const segments: string[] = [];
+  const $ = load(sanitized)
+  const segments: string[] = []
 
   $('h1,h2,h3,h4,h5,h6,li,p,blockquote,pre').each((_, element) => {
     if (!('tagName' in element) || typeof element.tagName !== 'string') {
-      return;
+      return
     }
 
-    const tag = element.tagName.toLowerCase();
+    const tag = element.tagName.toLowerCase()
 
-    const raw = $(element).text();
-    const text = normalizeWhitespace(raw).replaceAll(/\n+/g, ' ');
+    const raw = $(element).text()
+    const text = normalizeWhitespace(raw).replaceAll(/\n+/g, ' ')
     if (!text || text.length === 0) {
-      return;
+      return
     }
 
     if (tag.startsWith('h')) {
       if (text.length >= 10) {
-        segments.push(text);
+        segments.push(text)
       }
-      return;
+      return
     }
 
     if (tag === 'li') {
       if (text.length >= 20) {
-        segments.push(`• ${text}`);
+        segments.push(`• ${text}`)
       }
-      return;
+      return
     }
 
     if (text.length < MIN_SEGMENT_LENGTH) {
-      return;
+      return
     }
 
-    segments.push(text);
-  });
+    segments.push(text)
+  })
 
   if (segments.length === 0) {
-    const fallback = normalizeWhitespace($('body').text() || sanitized);
-    return fallback ? [fallback] : [];
+    const fallback = normalizeWhitespace($('body').text() || sanitized)
+    return fallback ? [fallback] : []
   }
 
-  return mergeConsecutiveSegments(segments);
+  return mergeConsecutiveSegments(segments)
 }
 
 export function extractPlainText(html: string): string {
-  const stripped = sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} });
-  return decodeHtmlEntities(stripped);
+  const stripped = sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} })
+  return decodeHtmlEntities(stripped)
 }
 
 function mergeConsecutiveSegments(segments: string[]): string[] {
-  const merged: string[] = [];
+  const merged: string[] = []
   for (const segment of segments) {
-    if (!segment) continue;
-    const last = merged.at(-1);
+    if (!segment) continue
+    const last = merged.at(-1)
     if (last && !segment.startsWith('•') && segment.length < MIN_SEGMENT_LENGTH / 2) {
-      merged[merged.length - 1] = `${last} ${segment}`;
-      continue;
+      merged[merged.length - 1] = `${last} ${segment}`
+      continue
     }
-    merged.push(segment);
+    merged.push(segment)
   }
-  return merged;
+  return merged
 }

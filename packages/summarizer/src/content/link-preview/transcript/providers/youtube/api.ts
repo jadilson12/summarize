@@ -1,66 +1,67 @@
-import { fetchWithTimeout } from '../../../fetch-with-timeout.js';
-import { extractYoutubeBootstrapConfig, isRecord } from '../../utils.js';
+import { fetchWithTimeout } from '../../../fetch-with-timeout.js'
+import { extractYoutubeBootstrapConfig, isRecord } from '../../utils.js'
 
 const REQUEST_HEADERS: Record<string, string> = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  Accept:
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
   'Cache-Control': 'no-cache',
   Pragma: 'no-cache',
-};
+}
 
 export interface YoutubeTranscriptConfig {
-  apiKey: string;
-  context: Record<string, unknown>;
-  params: string;
+  apiKey: string
+  context: Record<string, unknown>
+  params: string
 }
 
 type YoutubeBootstrapConfig = Record<string, unknown> & {
-  INNERTUBE_API_KEY?: unknown;
-  INNERTUBE_CONTEXT?: unknown;
-  INNERTUBE_CLIENT_VERSION?: unknown;
-};
+  INNERTUBE_API_KEY?: unknown
+  INNERTUBE_CONTEXT?: unknown
+  INNERTUBE_CLIENT_VERSION?: unknown
+}
 
-type TranscriptRunRecord = Record<string, unknown> & { text?: unknown };
-const GET_TRANSCRIPT_ENDPOINT_REGEX = /"getTranscriptEndpoint":\{"params":"([^"]+)"\}/;
+type TranscriptRunRecord = Record<string, unknown> & { text?: unknown }
+const GET_TRANSCRIPT_ENDPOINT_REGEX = /"getTranscriptEndpoint":\{"params":"([^"]+)"\}/
 
 export const extractYoutubeiTranscriptConfig = (html: string): YoutubeTranscriptConfig | null => {
   try {
-    const bootstrapConfig = extractYoutubeBootstrapConfig(html);
+    const bootstrapConfig = extractYoutubeBootstrapConfig(html)
     if (!bootstrapConfig) {
-      return null;
+      return null
     }
 
-    const parametersMatch = html.match(GET_TRANSCRIPT_ENDPOINT_REGEX);
+    const parametersMatch = html.match(GET_TRANSCRIPT_ENDPOINT_REGEX)
     if (!parametersMatch) {
-      return null;
+      return null
     }
 
-    const [, parameters] = parametersMatch;
+    const [, parameters] = parametersMatch
     if (!parameters) {
-      return null;
+      return null
     }
 
-    const typedBootstrap = bootstrapConfig as YoutubeBootstrapConfig;
-    const apiKeyCandidate = typedBootstrap.INNERTUBE_API_KEY;
-    const apiKey = typeof apiKeyCandidate === 'string' ? apiKeyCandidate : null;
-    const contextCandidate = typedBootstrap.INNERTUBE_CONTEXT;
-    const context = isRecord(contextCandidate) ? contextCandidate : null;
+    const typedBootstrap = bootstrapConfig as YoutubeBootstrapConfig
+    const apiKeyCandidate = typedBootstrap.INNERTUBE_API_KEY
+    const apiKey = typeof apiKeyCandidate === 'string' ? apiKeyCandidate : null
+    const contextCandidate = typedBootstrap.INNERTUBE_CONTEXT
+    const context = isRecord(contextCandidate) ? contextCandidate : null
 
     if (!(apiKey && context)) {
-      return null;
+      return null
     }
 
     return {
       apiKey,
       context,
       params: parameters,
-    };
+    }
   } catch {
-    return null;
+    return null
   }
-};
+}
 
 export const fetchTranscriptFromTranscriptEndpoint = async (
   fetchImpl: typeof fetch,
@@ -68,13 +69,15 @@ export const fetchTranscriptFromTranscriptEndpoint = async (
     config,
     originalUrl,
   }: {
-    config: YoutubeTranscriptConfig;
-    originalUrl: string;
+    config: YoutubeTranscriptConfig
+    originalUrl: string
   }
 ): Promise<string | null> => {
-  type YoutubeClientContext = Record<string, unknown> & { client?: unknown };
-  const contextRecord = config.context as YoutubeClientContext;
-  const existingClient = isRecord(contextRecord.client) ? (contextRecord.client as Record<string, unknown>) : {};
+  type YoutubeClientContext = Record<string, unknown> & { client?: unknown }
+  const contextRecord = config.context as YoutubeClientContext
+  const existingClient = isRecord(contextRecord.client)
+    ? (contextRecord.client as Record<string, unknown>)
+    : {}
 
   const payload = {
     context: {
@@ -85,12 +88,12 @@ export const fetchTranscriptFromTranscriptEndpoint = async (
       },
     },
     params: config.params,
-  };
+  }
 
   try {
     const userAgent =
       REQUEST_HEADERS['User-Agent'] ??
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
     const response = await fetchWithTimeout(
       fetchImpl,
       `https://www.youtube.com/youtubei/v1/get_transcript?key=${config.apiKey}`,
@@ -102,147 +105,151 @@ export const fetchTranscriptFromTranscriptEndpoint = async (
         },
         body: JSON.stringify(payload),
       }
-    );
+    )
 
     if (!response.ok) {
-      return null;
+      return null
     }
 
-    return extractTranscriptFromTranscriptEndpoint(await response.json());
+    return extractTranscriptFromTranscriptEndpoint(await response.json())
   } catch {
-    return null;
+    return null
   }
-};
+}
 
 // Type-safe helper functions for YouTube API parsing
 function getNestedProperty(object: unknown, path: string[]): unknown {
-  let current: unknown = object;
+  let current: unknown = object
   for (const key of path) {
     if (!(isRecord(current) && key in current)) {
-      return null;
+      return null
     }
-    current = current[key];
+    current = current[key]
   }
-  return current;
+  return current
 }
 
 function getArrayProperty(object: unknown, path: string[]): unknown[] | null {
-  const value = getNestedProperty(object, path);
-  return Array.isArray(value) ? value : null;
+  const value = getNestedProperty(object, path)
+  return Array.isArray(value) ? value : null
 }
 
 export const extractTranscriptFromTranscriptEndpoint = (data: unknown): string | null => {
   if (!isRecord(data)) {
-    return null;
+    return null
   }
 
-  const actions = getArrayProperty(data, ['actions']);
+  const actions = getArrayProperty(data, ['actions'])
   if (!actions || actions.length === 0) {
-    return null;
+    return null
   }
 
-  const updatePanel = getNestedProperty(actions[0], ['updateEngagementPanelAction']);
+  const updatePanel = getNestedProperty(actions[0], ['updateEngagementPanelAction'])
   if (!updatePanel) {
-    return null;
+    return null
   }
 
-  const transcriptContent = getNestedProperty(updatePanel, ['content']);
+  const transcriptContent = getNestedProperty(updatePanel, ['content'])
   if (!transcriptContent) {
-    return null;
+    return null
   }
 
-  const searchPanel = getNestedProperty(transcriptContent, ['transcriptRenderer']);
+  const searchPanel = getNestedProperty(transcriptContent, ['transcriptRenderer'])
   if (!searchPanel) {
-    return null;
+    return null
   }
 
-  const segmentList = getNestedProperty(searchPanel, ['content']);
+  const segmentList = getNestedProperty(searchPanel, ['content'])
   if (!segmentList) {
-    return null;
+    return null
   }
 
-  const listRenderer = getNestedProperty(segmentList, ['transcriptSearchPanelRenderer']);
+  const listRenderer = getNestedProperty(segmentList, ['transcriptSearchPanelRenderer'])
   if (!listRenderer) {
-    return null;
+    return null
   }
 
-  const body = getNestedProperty(listRenderer, ['body']);
+  const body = getNestedProperty(listRenderer, ['body'])
   if (!body) {
-    return null;
+    return null
   }
 
-  const segmentBody = getNestedProperty(body, ['transcriptSegmentListRenderer']);
+  const segmentBody = getNestedProperty(body, ['transcriptSegmentListRenderer'])
   if (!segmentBody) {
-    return null;
+    return null
   }
 
-  const segments = getArrayProperty(segmentBody, ['initialSegments']);
+  const segments = getArrayProperty(segmentBody, ['initialSegments'])
   if (!segments || segments.length === 0) {
-    return null;
+    return null
   }
 
-  const lines: string[] = [];
+  const lines: string[] = []
   for (const segment of segments) {
-    const renderer = getNestedProperty(segment, ['transcriptSegmentRenderer']);
+    const renderer = getNestedProperty(segment, ['transcriptSegmentRenderer'])
     if (!renderer) {
-      continue;
+      continue
     }
 
-    const snippet = getNestedProperty(renderer, ['snippet']);
+    const snippet = getNestedProperty(renderer, ['snippet'])
     if (!snippet) {
-      continue;
+      continue
     }
 
-    const runs = getArrayProperty(snippet, ['runs']);
+    const runs = getArrayProperty(snippet, ['runs'])
     if (!runs) {
-      continue;
+      continue
     }
     const text = runs
       .map((value) => {
         if (!isRecord(value)) {
-          return '';
+          return ''
         }
-        const runRecord = value as TranscriptRunRecord;
-        return typeof runRecord.text === 'string' ? runRecord.text : '';
+        const runRecord = value as TranscriptRunRecord
+        return typeof runRecord.text === 'string' ? runRecord.text : ''
       })
       .join('')
-      .trim();
+      .trim()
     if (text.length > 0) {
-      lines.push(text);
+      lines.push(text)
     }
   }
 
   if (lines.length === 0) {
-    return null;
+    return null
   }
 
-  return lines.join('\n');
-};
+  return lines.join('\n')
+}
 
 export const extractYoutubeiBootstrap = (
   html: string
-): { apiKey: string | null; context: Record<string, unknown>; clientVersion: string | null } | null => {
+): {
+  apiKey: string | null
+  context: Record<string, unknown>
+  clientVersion: string | null
+} | null => {
   try {
-    const bootstrapConfig = extractYoutubeBootstrapConfig(html);
+    const bootstrapConfig = extractYoutubeBootstrapConfig(html)
     if (!bootstrapConfig) {
-      return null;
+      return null
     }
-    const typedBootstrap = bootstrapConfig as YoutubeBootstrapConfig;
-    const apiKeyCandidate = typedBootstrap.INNERTUBE_API_KEY;
-    const apiKey = typeof apiKeyCandidate === 'string' ? apiKeyCandidate : null;
-    const contextCandidate = typedBootstrap.INNERTUBE_CONTEXT;
-    const context = isRecord(contextCandidate) ? contextCandidate : null;
-    const clientVersionCandidate = typedBootstrap.INNERTUBE_CLIENT_VERSION;
-    const clientVersion = typeof clientVersionCandidate === 'string' ? clientVersionCandidate : null;
+    const typedBootstrap = bootstrapConfig as YoutubeBootstrapConfig
+    const apiKeyCandidate = typedBootstrap.INNERTUBE_API_KEY
+    const apiKey = typeof apiKeyCandidate === 'string' ? apiKeyCandidate : null
+    const contextCandidate = typedBootstrap.INNERTUBE_CONTEXT
+    const context = isRecord(contextCandidate) ? contextCandidate : null
+    const clientVersionCandidate = typedBootstrap.INNERTUBE_CLIENT_VERSION
+    const clientVersion = typeof clientVersionCandidate === 'string' ? clientVersionCandidate : null
     if (!context) {
-      return null;
+      return null
     }
     return {
       apiKey,
       context,
       clientVersion,
-    };
+    }
   } catch {
-    return null;
+    return null
   }
-};
+}

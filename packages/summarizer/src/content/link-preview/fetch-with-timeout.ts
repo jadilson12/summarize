@@ -1,7 +1,7 @@
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 30_000
 
-type FetchLike = typeof fetch;
-type FetchArguments = Parameters<typeof fetch>;
+type FetchLike = typeof fetch
+type FetchArguments = Parameters<typeof fetch>
 
 export async function fetchWithTimeout(
   fetchImpl: FetchLike,
@@ -10,35 +10,35 @@ export async function fetchWithTimeout(
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
   if (init?.signal) {
-    return fetchImpl(input, init ?? {});
+    return fetchImpl(input, init ?? {})
   }
 
-  const controller = new AbortController();
-  const normalizedTimeoutMs = Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_TIMEOUT_MS;
-  const clampedTimeoutMs = Math.max(0, normalizedTimeoutMs);
+  const controller = new AbortController()
+  const normalizedTimeoutMs = Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_TIMEOUT_MS
+  const clampedTimeoutMs = Math.max(0, normalizedTimeoutMs)
 
   const timer = setTimeout(() => {
     if (typeof DOMException === 'function') {
-      controller.abort(new DOMException('Request timed out', 'AbortError'));
-      return;
+      controller.abort(new DOMException('Request timed out', 'AbortError'))
+      return
     }
-    controller.abort();
-  }, clampedTimeoutMs);
+    controller.abort()
+  }, clampedTimeoutMs)
 
   try {
     const finalInit: RequestInit = {
       ...init,
       signal: controller.signal,
-    };
-    return await fetchImpl(input, finalInit);
+    }
+    return await fetchImpl(input, finalInit)
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      const timeoutError = new Error(`Fetch aborted after ${clampedTimeoutMs}ms`);
-      timeoutError.name = 'FetchTimeoutError';
-      throw timeoutError;
+      const timeoutError = new Error(`Fetch aborted after ${clampedTimeoutMs}ms`)
+      timeoutError.name = 'FetchTimeoutError'
+      throw timeoutError
     }
-    throw error;
+    throw error
   } finally {
-    clearTimeout(timer);
+    clearTimeout(timer)
   }
 }

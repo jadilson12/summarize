@@ -1,23 +1,23 @@
-import { type CheerioAPI, load } from 'cheerio';
+import { type CheerioAPI, load } from 'cheerio'
 
-import { decodeHtmlEntities, normalizeCandidate } from './cleaner.js';
-import { pickFirstText, safeHostname } from './utils.js';
+import { decodeHtmlEntities, normalizeCandidate } from './cleaner.js'
+import { pickFirstText, safeHostname } from './utils.js'
 
-const ALLOWED_TEXT_TAGS = new Set(['title']);
+const ALLOWED_TEXT_TAGS = new Set(['title'])
 
 interface MetaSelector {
-  attribute: 'property' | 'name';
-  value: string;
+  attribute: 'property' | 'name'
+  value: string
 }
 
 export interface ParsedMetadata {
-  title: string | null;
-  description: string | null;
-  siteName: string | null;
+  title: string | null
+  description: string | null
+  siteName: string | null
 }
 
 export function extractMetadataFromHtml(html: string, url: string): ParsedMetadata {
-  const $ = load(html);
+  const $ = load(html)
 
   const title = pickFirstText([
     pickMetaContent($, [
@@ -26,7 +26,7 @@ export function extractMetadataFromHtml(html: string, url: string): ParsedMetada
       { attribute: 'name', value: 'twitter:title' },
     ]),
     extractTagText($, 'title'),
-  ]);
+  ])
 
   const description = pickFirstText([
     pickMetaContent($, [
@@ -34,7 +34,7 @@ export function extractMetadataFromHtml(html: string, url: string): ParsedMetada
       { attribute: 'name', value: 'description' },
       { attribute: 'name', value: 'twitter:description' },
     ]),
-  ]);
+  ])
 
   const siteName = pickFirstText([
     pickMetaContent($, [
@@ -42,51 +42,62 @@ export function extractMetadataFromHtml(html: string, url: string): ParsedMetada
       { attribute: 'name', value: 'application-name' },
     ]),
     safeHostname(url),
-  ]);
+  ])
 
-  return { title, description, siteName };
+  return { title, description, siteName }
 }
 
-export function extractMetadataFromFirecrawl(metadata: Record<string, unknown> | null | undefined): ParsedMetadata {
+export function extractMetadataFromFirecrawl(
+  metadata: Record<string, unknown> | null | undefined
+): ParsedMetadata {
   return {
     title: pickFirstText([metadataString(metadata, 'title'), metadataString(metadata, 'ogTitle')]),
-    description: pickFirstText([metadataString(metadata, 'description'), metadataString(metadata, 'ogDescription')]),
-    siteName: pickFirstText([metadataString(metadata, 'siteName'), metadataString(metadata, 'ogSiteName')]),
-  };
+    description: pickFirstText([
+      metadataString(metadata, 'description'),
+      metadataString(metadata, 'ogDescription'),
+    ]),
+    siteName: pickFirstText([
+      metadataString(metadata, 'siteName'),
+      metadataString(metadata, 'ogSiteName'),
+    ]),
+  }
 }
 
 function pickMetaContent($: CheerioAPI, selectors: MetaSelector[]): string | null {
   for (const selector of selectors) {
-    const meta = $(`meta[${selector.attribute}="${selector.value}"]`).first();
+    const meta = $(`meta[${selector.attribute}="${selector.value}"]`).first()
     if (meta.length === 0) {
-      continue;
+      continue
     }
-    const value = meta.attr('content') ?? meta.attr('value') ?? '';
-    const normalized = normalizeCandidate(decodeHtmlEntities(value));
+    const value = meta.attr('content') ?? meta.attr('value') ?? ''
+    const normalized = normalizeCandidate(decodeHtmlEntities(value))
     if (normalized) {
-      return normalized;
+      return normalized
     }
   }
-  return null;
+  return null
 }
 
 function extractTagText($: CheerioAPI, tagName: string): string | null {
-  const normalizedTag = tagName.trim().toLowerCase();
+  const normalizedTag = tagName.trim().toLowerCase()
   if (!ALLOWED_TEXT_TAGS.has(normalizedTag)) {
-    return null;
+    return null
   }
-  const element = $(normalizedTag).first();
+  const element = $(normalizedTag).first()
   if (element.length === 0) {
-    return null;
+    return null
   }
-  const text = decodeHtmlEntities(element.text());
-  return normalizeCandidate(text);
+  const text = decodeHtmlEntities(element.text())
+  return normalizeCandidate(text)
 }
 
-function metadataString(metadata: Record<string, unknown> | null | undefined, key: string): string | null {
+function metadataString(
+  metadata: Record<string, unknown> | null | undefined,
+  key: string
+): string | null {
   if (!metadata) {
-    return null;
+    return null
   }
-  const value = metadata[key];
-  return typeof value === 'string' ? normalizeCandidate(value) : null;
+  const value = metadata[key]
+  return typeof value === 'string' ? normalizeCandidate(value) : null
 }

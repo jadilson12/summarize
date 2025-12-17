@@ -1,4 +1,4 @@
-import type { SummaryLength } from '../shared/contracts.js';
+import type { SummaryLength } from '../shared/contracts.js'
 
 const SUMMARY_LENGTH_DIRECTIVES: Record<SummaryLength, { guidance: string; formatting: string }> = {
   short: {
@@ -30,7 +30,7 @@ const SUMMARY_LENGTH_DIRECTIVES: Record<SummaryLength, { guidance: string; forma
     formatting:
       'Use Markdown headings (###) for each section, combine paragraphs and bullet lists as needed, and ensure the overall response is substantial (multiple paragraphs and bullets totalling several hundred words) while remaining factual.',
   },
-};
+}
 
 export const SUMMARY_LENGTH_TO_TOKENS: Record<SummaryLength, number> = {
   short: 256,
@@ -38,24 +38,26 @@ export const SUMMARY_LENGTH_TO_TOKENS: Record<SummaryLength, number> = {
   long: 1024,
   xl: 2048,
   xxl: 4096,
-};
+}
 
-const resolveSummaryDirective = (length: SummaryLength): (typeof SUMMARY_LENGTH_DIRECTIVES)[SummaryLength] =>
+const resolveSummaryDirective = (
+  length: SummaryLength
+): (typeof SUMMARY_LENGTH_DIRECTIVES)[SummaryLength] =>
   // SummaryLength is a contracts-enforced enum in all call sites; suppress generic injection warning.
   // eslint-disable-next-line security/detect-object-injection
-  SUMMARY_LENGTH_DIRECTIVES[length];
+  SUMMARY_LENGTH_DIRECTIVES[length]
 
-const formatCount = (value: number): string => value.toLocaleString();
+const formatCount = (value: number): string => value.toLocaleString()
 
 export type ShareContextEntry = {
-  author: string;
-  handle?: string | null;
-  text: string;
-  likeCount?: number | null;
-  reshareCount?: number | null;
-  replyCount?: number | null;
-  timestamp?: string | null;
-};
+  author: string
+  handle?: string | null
+  text: string
+  likeCount?: number | null
+  reshareCount?: number | null
+  replyCount?: number | null
+  timestamp?: string | null
+}
 
 export function buildLinkSummaryPrompt({
   url,
@@ -68,65 +70,65 @@ export function buildLinkSummaryPrompt({
   summaryLength,
   shares,
 }: {
-  url: string;
-  title: string | null;
-  siteName: string | null;
-  description: string | null;
-  content: string;
-  truncated: boolean;
-  hasTranscript: boolean;
-  summaryLength: SummaryLength;
-  shares: ShareContextEntry[];
+  url: string
+  title: string | null
+  siteName: string | null
+  description: string | null
+  content: string
+  truncated: boolean
+  hasTranscript: boolean
+  summaryLength: SummaryLength
+  shares: ShareContextEntry[]
 }): string {
-  const contextLines: string[] = [`Source URL: ${url}`];
+  const contextLines: string[] = [`Source URL: ${url}`]
 
   if (title) {
-    contextLines.push(`Title: ${title}`);
+    contextLines.push(`Title: ${title}`)
   }
 
   if (siteName) {
-    contextLines.push(`Site: ${siteName}`);
+    contextLines.push(`Site: ${siteName}`)
   }
 
   if (description) {
-    contextLines.push(`Page description: ${description}`);
+    contextLines.push(`Page description: ${description}`)
   }
 
   if (truncated) {
-    contextLines.push('Note: Content truncated to the first portion available.');
+    contextLines.push('Note: Content truncated to the first portion available.')
   }
 
-  const contextHeader = contextLines.join('\n');
+  const contextHeader = contextLines.join('\n')
 
   const audienceLine = hasTranscript
     ? 'You summarize online videos for curious Twitter users who want to know whether the clip is worth watching.'
-    : 'You summarize online articles for curious Twitter users who want the gist before deciding to dive in.';
+    : 'You summarize online articles for curious Twitter users who want the gist before deciding to dive in.'
 
-  const directive = resolveSummaryDirective(summaryLength);
+  const directive = resolveSummaryDirective(summaryLength)
 
   const shareLines = shares.map((share) => {
-    const handle = share.handle && share.handle.length > 0 ? `@${share.handle}` : share.author;
-    const metrics: string[] = [];
+    const handle = share.handle && share.handle.length > 0 ? `@${share.handle}` : share.author
+    const metrics: string[] = []
     if (typeof share.likeCount === 'number' && share.likeCount > 0) {
-      metrics.push(`${formatCount(share.likeCount)} likes`);
+      metrics.push(`${formatCount(share.likeCount)} likes`)
     }
     if (typeof share.reshareCount === 'number' && share.reshareCount > 0) {
-      metrics.push(`${formatCount(share.reshareCount)} reshares`);
+      metrics.push(`${formatCount(share.reshareCount)} reshares`)
     }
     if (typeof share.replyCount === 'number' && share.replyCount > 0) {
-      metrics.push(`${formatCount(share.replyCount)} replies`);
+      metrics.push(`${formatCount(share.replyCount)} replies`)
     }
-    const metricsSuffix = metrics.length > 0 ? ` [${metrics.join(', ')}]` : '';
-    const timestamp = share.timestamp ? ` (${share.timestamp})` : '';
-    return `- ${handle}${timestamp}${metricsSuffix}: ${share.text}`;
-  });
+    const metricsSuffix = metrics.length > 0 ? ` [${metrics.join(', ')}]` : ''
+    const timestamp = share.timestamp ? ` (${share.timestamp})` : ''
+    return `- ${handle}${timestamp}${metricsSuffix}: ${share.text}`
+  })
 
   const shareGuidance =
     shares.length > 0
       ? 'You are also given quotes from people who recently shared this link. When these quotes contain substantive commentary, append a brief subsection titled "What sharers are saying" with one or two bullet points summarizing the key reactions. If they are generic reshares with no commentary, omit that subsection.'
-      : 'You are not given any quotes from people who shared this link. Do not fabricate reactions or add a "What sharers are saying" subsection.';
+      : 'You are not given any quotes from people who shared this link. Do not fabricate reactions or add a "What sharers are saying" subsection.'
 
-  const sharesBlock = shares.length > 0 ? `Tweets from sharers:\n${shareLines.join('\n')}\n\n` : '';
+  const sharesBlock = shares.length > 0 ? `Tweets from sharers:\n${shareLines.join('\n')}\n\n` : ''
 
   return `${audienceLine} ${directive.guidance} ${directive.formatting} Keep the response compact by avoiding blank lines between sentences or list items; use only the single newlines required by the formatting instructions. Do not use emojis, disclaimers, or speculation. Write in direct, factual language. Format the answer in Markdown and obey the length-specific formatting above. Base everything strictly on the provided content and never invent details. ${shareGuidance}
 
@@ -136,5 +138,5 @@ ${sharesBlock}Extracted content:
 """
 ${content}
 """
-`;
+`
 }
