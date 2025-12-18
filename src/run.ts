@@ -271,6 +271,8 @@ export async function runCli(
   argv: string[],
   { env, fetch, stdout, stderr }: RunEnv
 ): Promise<void> {
+  ;(globalThis as unknown as { AI_SDK_LOG_WARNINGS?: boolean }).AI_SDK_LOG_WARNINGS = false
+
   const normalizedArgv = argv.filter((arg) => arg !== '--')
   const program = buildProgram()
   program.configureOutput({
