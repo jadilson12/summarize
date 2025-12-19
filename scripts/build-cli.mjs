@@ -21,5 +21,6 @@ await build({
   sourcemap: true,
   logLevel: 'info',
   banner: { js: '#!/usr/bin/env node' },
-  external: ['cheerio', 'commander', 'es-toolkit', 'sanitize-html'],
+  // Keep core dependencies external for the library build; CLI-only deps get bundled.
+  external: ['cheerio', 'es-toolkit', 'sanitize-html'],
 })
