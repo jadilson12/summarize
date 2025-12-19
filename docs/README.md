@@ -5,3 +5,7 @@
 - `docs/firecrawl.md` — Firecrawl mode + API key
 - `docs/llm.md` — LLM summarization + model config (Gateway/OpenAI)
 - `docs/extract-only.md` — extraction mode (no LLM call)
+
+## Website
+
+- Static site source: `docs/site/` (GitHub Pages via Actions)
