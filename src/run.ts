@@ -438,6 +438,7 @@ async function summarizeWithModelId({
     modelId,
     apiKeys,
     prompt,
+    temperature: 0,
     maxOutputTokens,
     timeoutMs,
     fetchImpl,
@@ -927,6 +928,7 @@ export async function runCli(
           modelId: parsedModelEffective.canonical,
           apiKeys: apiKeysForLlm,
           prompt: promptPayload,
+          temperature: 0,
           maxOutputTokens: maxOutputTokensCapped,
           timeoutMs,
           fetchImpl: trackedFetch,
@@ -1730,6 +1732,7 @@ export async function runCli(
             modelId: parsedModelEffective.canonical,
             apiKeys: apiKeysForLlm,
             prompt,
+            temperature: 0,
             maxOutputTokens: maxOutputTokensForCall,
             timeoutMs,
             fetchImpl: trackedFetch,
@@ -1936,6 +1939,7 @@ export async function runCli(
             modelId: parsedModelEffective.canonical,
             apiKeys: apiKeysForLlm,
             prompt: mergedPrompt,
+            temperature: 0,
             maxOutputTokens: maxOutputTokensForCall,
             timeoutMs,
             fetchImpl: trackedFetch,
@@ -2159,7 +2163,3 @@ export async function runCli(
     stopProgress()
   }
 }
-    temperature: 0,
-          temperature: 0,
-            temperature: 0,
-            temperature: 0,
