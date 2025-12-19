@@ -2,7 +2,7 @@
 
 Fast CLI for summarizing *anything you can point at*:
 
-- Web pages (article extraction)
+- Web pages (article extraction; Firecrawl fallback if sites block agents)
 - YouTube links (best-effort transcripts, optional Apify fallback)
 - Remote files (PDFs/images/audio/video via URL — downloaded and forwarded to the model)
 - Local files (PDFs/images/audio/video/text — forwarded or inlined; support depends on provider/model)
