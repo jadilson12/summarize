@@ -1442,11 +1442,19 @@ export async function runCli(
 
     let ticker: ReturnType<typeof setInterval> | null = null
 
-    const updateSpinner = (text: string) => {
+    const updateSpinner = (text: string, options?: { force?: boolean }) => {
       const now = Date.now()
-      if (now - state.lastSpinnerUpdateAtMs < 100) return
+      if (!options?.force && now - state.lastSpinnerUpdateAtMs < 100) return
       state.lastSpinnerUpdateAtMs = now
       spinner.setText(text)
+    }
+
+    const formatFirecrawlReason = (reason: string) => {
+      const lower = reason.toLowerCase()
+      if (lower.includes('forced')) return 'forced'
+      if (lower.includes('html fetch failed')) return 'fallback: HTML fetch failed'
+      if (lower.includes('blocked') || lower.includes('thin')) return 'fallback: blocked/thin HTML'
+      return reason
     }
 
     const renderFetchLine = () => {
@@ -1528,7 +1536,9 @@ export async function runCli(
         if (event.kind === 'firecrawl-start') {
           state.phase = 'firecrawl'
           stopTicker()
-          updateSpinner('Firecrawl: scraping…')
+          const reason = event.reason ? formatFirecrawlReason(event.reason) : ''
+          const suffix = reason ? ` (${reason})` : ''
+          updateSpinner(`Firecrawl: scraping${suffix}…`, { force: true })
           return
         }
 
@@ -1536,10 +1546,10 @@ export async function runCli(
           state.phase = 'firecrawl'
           stopTicker()
           if (event.ok && typeof event.markdownBytes === 'number') {
-            updateSpinner(`Firecrawl: got ${formatBytes(event.markdownBytes)}…`)
+            updateSpinner(`Firecrawl: got ${formatBytes(event.markdownBytes)}…`, { force: true })
             return
           }
-          updateSpinner('Firecrawl: no content; fallback…')
+          updateSpinner('Firecrawl: no content; fallback…', { force: true })
         }
       },
     }
