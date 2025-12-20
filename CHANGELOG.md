@@ -8,6 +8,7 @@
 - Preflight text prompts with the GPT tokenizer and the model’s max input tokens.
 - Reject text files over 10 MB before tokenization.
 - Reject too-small numeric `--length` and `--max-output-tokens` values.
+- Compute cost totals via tokentally’s tally helpers.
 
 ## 0.1.2 - 2025-12-20
 

@@ -3,6 +3,7 @@ import type { ModelMessage } from 'ai'
 import { Command, CommanderError, Option } from 'commander'
 import { countTokens } from 'gpt-tokenizer'
 import { createLiveRenderer, render as renderMarkdownAnsi } from 'markdansi'
+import { normalizeTokenUsage, tallyCosts } from 'tokentally'
 import { loadSummarizeConfig } from './config.js'
 import {
   buildAssetPromptMessages,
@@ -737,31 +738,29 @@ export async function runCli(
   const estimateCostUsd = async (): Promise<number | null> => {
     const catalog = await getLiteLlmCatalog()
     if (!catalog) return null
-
-    let total = 0
-    let any = false
-
-    for (const call of llmCalls) {
+    const calls = llmCalls.map((call) => {
       const promptTokens = call.usage?.promptTokens ?? null
       const completionTokens = call.usage?.completionTokens ?? null
-      if (
-        typeof promptTokens !== 'number' ||
-        !Number.isFinite(promptTokens) ||
-        typeof completionTokens !== 'number' ||
-        !Number.isFinite(completionTokens)
-      ) {
-        continue
-      }
+      const hasTokens =
+        typeof promptTokens === 'number' &&
+        Number.isFinite(promptTokens) &&
+        typeof completionTokens === 'number' &&
+        Number.isFinite(completionTokens)
+      const usage = hasTokens
+        ? normalizeTokenUsage({
+            inputTokens: promptTokens,
+            outputTokens: completionTokens,
+            totalTokens: call.usage?.totalTokens ?? undefined,
+          })
+        : null
+      return { model: call.model, usage }
+    })
 
-      const pricing = resolveLiteLlmPricingForModelId(catalog, call.model)
-      if (!pricing) continue
-
-      total +=
-        promptTokens * pricing.inputUsdPerToken + completionTokens * pricing.outputUsdPerToken
-      any = true
-    }
-
-    return any ? total : null
+    const result = await tallyCosts({
+      calls,
+      resolvePricing: (modelId) => resolveLiteLlmPricingForModelId(catalog, modelId),
+    })
+    return result.total?.totalUsd ?? null
   }
   const buildReport = async () => {
     return buildRunMetricsReport({ llmCalls, firecrawlRequests, apifyRequests })
