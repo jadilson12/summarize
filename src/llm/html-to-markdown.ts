@@ -61,7 +61,12 @@ export function createHtmlToMarkdownConverter({
   openrouterApiKey: string | null
   openrouter?: OpenRouterOptions
   retries?: number
-  onRetry?: (notice: { attempt: number; maxRetries: number; delayMs: number; error: unknown }) => void
+  onRetry?: (notice: {
+    attempt: number
+    maxRetries: number
+    delayMs: number
+    error: unknown
+  }) => void
   onUsage?: (usage: {
     model: string
     provider: 'xai' | 'openai' | 'google' | 'anthropic'

@@ -316,8 +316,8 @@ const extractTranscriptFromPlayerPayload = async (
       ...automaticTracks.filter((track): track is Record<string, unknown> => isObjectLike(track))
     )
   }
-  const filteredTracks = orderedTracks.filter(
-    (track): track is Record<string, unknown> => isObjectLike(track)
+  const filteredTracks = orderedTracks.filter((track): track is Record<string, unknown> =>
+    isObjectLike(track)
   )
 
   const sortedTracks = [...filteredTracks].toSorted((a, b) => {

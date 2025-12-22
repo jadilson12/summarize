@@ -1,6 +1,6 @@
-import { runCli } from './run.js'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { runCli } from './run.js'
 
 export type CliMainArgs = {
   argv: string[]
@@ -127,8 +127,7 @@ export async function runCliMain({
   const verbose = argv.includes('--verbose') || argv.includes('--verbose=true')
 
   try {
-    const mergedEnv =
-      env === process.env ? { ...(await loadDotenvFromCwd()), ...env } : env
+    const mergedEnv = env === process.env ? { ...(await loadDotenvFromCwd()), ...env } : env
     await runCli(argv, { env: mergedEnv, fetch, stdout, stderr })
   } catch (error: unknown) {
     const isTty = Boolean((stderr as unknown as { isTTY?: boolean }).isTTY)

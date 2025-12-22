@@ -63,7 +63,7 @@ describe('cli config precedence', () => {
     const tempRoot = mkdtempSync(join(tmpdir(), 'summarize-cli-config-'))
     const configPath = join(tempRoot, '.summarize', 'config.json')
     mkdirSync(join(tempRoot, '.summarize'), { recursive: true })
-    writeFileSync(configPath, JSON.stringify({ model: 'openai/gpt-5.2' }), 'utf8')
+    writeFileSync(configPath, JSON.stringify({ model: { id: 'openai/gpt-5.2' } }), 'utf8')
 
     await runCli(['--timeout', '2s', 'https://example.com'], {
       env: { HOME: tempRoot, OPENAI_API_KEY: 'test' },
@@ -92,7 +92,11 @@ describe('cli config precedence', () => {
     const tempRoot = mkdtempSync(join(tmpdir(), 'summarize-cli-config-'))
     const configPath = join(tempRoot, '.summarize', 'config.json')
     mkdirSync(join(tempRoot, '.summarize'), { recursive: true })
-    writeFileSync(configPath, JSON.stringify({ model: 'xai/grok-4-fast-non-reasoning' }), 'utf8')
+    writeFileSync(
+      configPath,
+      JSON.stringify({ model: { id: 'xai/grok-4-fast-non-reasoning' } }),
+      'utf8'
+    )
 
     const stdout = captureStream()
 

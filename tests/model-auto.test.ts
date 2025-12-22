@@ -6,7 +6,10 @@ import { buildAutoModelAttempts } from '../src/model-auto.js'
 describe('auto model selection', () => {
   it('preserves candidate order (native then OpenRouter fallback)', () => {
     const config: SummarizeConfig = {
-      auto: { rules: [{ candidates: [{ model: 'openai/gpt-5.2' }, { model: 'xai/grok-4-fast-non-reasoning' }] }] },
+      model: {
+        mode: 'auto',
+        rules: [{ candidates: ['openai/gpt-5.2', 'xai/grok-4-fast-non-reasoning'] }],
+      },
     }
     const attempts = buildAutoModelAttempts({
       kind: 'text',
@@ -27,7 +30,7 @@ describe('auto model selection', () => {
 
   it('adds an OpenRouter fallback attempt when OPENROUTER_API_KEY is set', () => {
     const config: SummarizeConfig = {
-      auto: { rules: [{ candidates: [{ model: 'openai/gpt-5.2' }] }] },
+      model: { mode: 'auto', rules: [{ candidates: ['openai/gpt-5.2'] }] },
     }
     const attempts = buildAutoModelAttempts({
       kind: 'text',
@@ -47,7 +50,7 @@ describe('auto model selection', () => {
 
   it('does not add an OpenRouter fallback when video understanding is required', () => {
     const config: SummarizeConfig = {
-      auto: { rules: [{ candidates: [{ model: 'google/gemini-3-flash-preview' }] }] },
+      model: { mode: 'auto', rules: [{ candidates: ['google/gemini-3-flash-preview'] }] },
     }
     const attempts = buildAutoModelAttempts({
       kind: 'video',
@@ -65,7 +68,7 @@ describe('auto model selection', () => {
 
   it('respects explicit openrouter/... candidates (no native attempt)', () => {
     const config: SummarizeConfig = {
-      auto: { rules: [{ candidates: [{ model: 'openrouter/openai/gpt-5-nano' }] }] },
+      model: { mode: 'auto', rules: [{ candidates: ['openrouter/openai/gpt-5-nano'] }] },
     }
     const attempts = buildAutoModelAttempts({
       kind: 'text',
@@ -80,5 +83,36 @@ describe('auto model selection', () => {
 
     expect(attempts.some((a) => a.userModelId === 'openrouter/openai/gpt-5-nano')).toBe(true)
     expect(attempts.some((a) => a.userModelId === 'openai/gpt-5-nano')).toBe(false)
+  })
+
+  it('selects candidates via token bands (first match wins)', () => {
+    const config: SummarizeConfig = {
+      model: {
+        mode: 'auto',
+        rules: [
+          {
+            when: ['text'],
+            bands: [
+              { token: { max: 100 }, candidates: ['openai/gpt-5-nano'] },
+              { token: { max: 1000 }, candidates: ['openai/gpt-5.2'] },
+              { candidates: ['xai/grok-4-fast-non-reasoning'] },
+            ],
+          },
+        ],
+      },
+    }
+
+    const attempts = buildAutoModelAttempts({
+      kind: 'text',
+      promptTokens: 200,
+      desiredOutputTokens: 50,
+      requiresVideoUnderstanding: false,
+      env: {},
+      config,
+      catalog: null,
+      openrouterProvidersFromEnv: null,
+    })
+
+    expect(attempts[0]?.userModelId).toBe('openai/gpt-5.2')
   })
 })

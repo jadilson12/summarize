@@ -23,39 +23,53 @@ For `model`:
 
 ```json
 {
-  "model": "google/gemini-3-flash-preview"
+  "model": { "id": "google/gemini-3-flash-preview" }
 }
 ```
 
-`model` can also be:
-
-- `"auto"` (automatic model selection; see `docs/model-auto.md`)
-- `openrouter/<provider>/<model>` (force OpenRouter; requires `OPENROUTER_API_KEY`)
-
-Additional keys (optional):
+`model` can also be auto:
 
 ```json
 {
-  "model": "auto",
-  "media": { "videoMode": "auto" },
-  "auto": [
-    {
-      "when": ["video"],
-      "candidates": ["google/gemini-3-flash-preview"]
-    },
-    {
-      "when": ["website", "youtube"],
-      "candidates": ["openai/gpt-5-nano", "xai/grok-4-fast-non-reasoning"]
-    },
-    {
-      "candidates": ["openai/gpt-5-nano", "openrouter/openai/gpt-5-nano"]
-    }
-  ]
+  "model": { "mode": "auto" }
+}
+```
+
+For auto selection with rules:
+
+```json
+{
+  "model": {
+    "mode": "auto",
+    "rules": [
+      {
+        "when": ["video"],
+        "candidates": ["google/gemini-3-flash-preview"]
+      },
+      {
+        "when": ["website", "youtube"],
+        "bands": [
+          {
+            "token": { "max": 8000 },
+            "candidates": ["openai/gpt-5-nano"]
+          },
+          {
+            "candidates": ["xai/grok-4-fast-non-reasoning"]
+          }
+        ]
+      },
+      {
+        "candidates": ["openai/gpt-5-nano", "openrouter/openai/gpt-5-nano"]
+      }
+    ]
+  },
+  "media": { "videoMode": "auto" }
 }
 ```
 
 Notes:
 
 - Parsed leniently (JSON5), but **comments are not allowed**.
-- `auto` must be an array. Legacy `auto: { "rules": [...] }` is not supported.
-- `auto[].when` (optional) must be an array (e.g. `["video","youtube"]`).
+- `model.rules` is optional. If omitted, built-in defaults apply.
+- `model.rules[].when` (optional) must be an array (e.g. `["video","youtube"]`).
+- `model.rules[]` must use either `candidates` or `bands`.

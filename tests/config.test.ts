@@ -11,14 +11,14 @@ describe('config loading', () => {
     const configDir = join(root, '.summarize')
     mkdirSync(configDir, { recursive: true })
     const configPath = join(configDir, 'config.json')
-    writeFileSync(configPath, JSON.stringify({ model: 'openai/gpt-5.2' }), 'utf8')
+    writeFileSync(configPath, JSON.stringify({ model: { id: 'openai/gpt-5.2' } }), 'utf8')
 
     const result = loadSummarizeConfig({ env: { HOME: root } })
     expect(result.path).toBe(configPath)
-    expect(result.config).toEqual({ model: 'openai/gpt-5.2' })
+    expect(result.config).toEqual({ model: { id: 'openai/gpt-5.2' } })
   })
 
-  it('supports simplified auto config shapes', () => {
+  it('loads auto model rules', () => {
     const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
     const configDir = join(root, '.summarize')
     mkdirSync(configDir, { recursive: true })
@@ -27,16 +27,18 @@ describe('config loading', () => {
     writeFileSync(
       configPath,
       JSON.stringify({
-        model: 'auto',
+        model: {
+          mode: 'auto',
+          rules: [
+            { when: ['video'], candidates: ['google/gemini-3-flash-preview'] },
+            {
+              when: ['youtube', 'website'],
+              candidates: ['openai/gpt-5-nano', 'xai/grok-4-fast-non-reasoning'],
+            },
+            { candidates: ['openai/gpt-5-nano', 'openrouter/openai/gpt-5-nano'] },
+          ],
+        },
         media: { videoMode: 'auto' },
-        auto: [
-          { when: ['video'], candidates: ['google/gemini-3-flash-preview'] },
-          {
-            when: ['youtube', 'website'],
-            candidates: ['openai/gpt-5-nano', { model: 'xai/grok-4-fast-non-reasoning', openrouterProviders: ['groq'] }],
-          },
-          { candidates: ['openai/gpt-5-nano', 'openrouter/openai/gpt-5-nano'] },
-        ],
       }),
       'utf8'
     )
@@ -44,30 +46,18 @@ describe('config loading', () => {
     const result = loadSummarizeConfig({ env: { HOME: root } })
     expect(result.path).toBe(configPath)
     expect(result.config).toEqual({
-      model: 'auto',
-      media: { videoMode: 'auto' },
-      auto: {
+      model: {
+        mode: 'auto',
         rules: [
-          { when: { kind: 'video' }, candidates: [{ model: 'google/gemini-3-flash-preview' }] },
+          { when: ['video'], candidates: ['google/gemini-3-flash-preview'] },
           {
-            when: { kind: 'youtube' },
-            candidates: [
-              { model: 'openai/gpt-5-nano' },
-              { model: 'xai/grok-4-fast-non-reasoning', openrouterProviders: ['groq'] },
-            ],
+            when: ['youtube', 'website'],
+            candidates: ['openai/gpt-5-nano', 'xai/grok-4-fast-non-reasoning'],
           },
-          {
-            when: { kind: 'website' },
-            candidates: [
-              { model: 'openai/gpt-5-nano' },
-              { model: 'xai/grok-4-fast-non-reasoning', openrouterProviders: ['groq'] },
-            ],
-          },
-          {
-            candidates: [{ model: 'openai/gpt-5-nano' }, { model: 'openrouter/openai/gpt-5-nano' }],
-          },
+          { candidates: ['openai/gpt-5-nano', 'openrouter/openai/gpt-5-nano'] },
         ],
       },
+      media: { videoMode: 'auto' },
     })
   })
 })

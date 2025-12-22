@@ -1,4 +1,4 @@
-import { load, type CheerioAPI } from 'cheerio'
+import { type CheerioAPI, load } from 'cheerio'
 
 export type DetectedVideo = {
   kind: 'youtube' | 'direct'
@@ -48,7 +48,10 @@ function extractYouTubeVideoIdFromEmbedUrl(raw: string): string | null {
   }
 }
 
-function metaContent($: CheerioAPI, selectors: Array<{ attribute: 'property' | 'name'; value: string }>): string | null {
+function metaContent(
+  $: CheerioAPI,
+  selectors: Array<{ attribute: 'property' | 'name'; value: string }>
+): string | null {
   for (const sel of selectors) {
     const meta = $(`meta[${sel.attribute}="${sel.value}"]`).first()
     if (meta.length === 0) continue
@@ -92,9 +95,7 @@ export function detectPrimaryVideoFromHtml(html: string, url: string): DetectedV
 
   // 3) <video> tags
   const videoSrc =
-    $('video[src]').first().attr('src') ??
-    $('video source[src]').first().attr('src') ??
-    null
+    $('video[src]').first().attr('src') ?? $('video source[src]').first().attr('src') ?? null
   if (videoSrc) {
     const resolved = resolveAbsoluteUrl(videoSrc, url)
     if (resolved && isDirectVideoUrl(resolved)) {

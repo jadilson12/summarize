@@ -21,7 +21,11 @@ describe('config error handling', () => {
     const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
     const configPath = join(root, '.summarize', 'config.json')
     mkdirSync(join(root, '.summarize'), { recursive: true })
-    writeFileSync(configPath, '{\n  // no comments\n  \"model\": \"openai/gpt-5.2\"\n}\n', 'utf8')
+    writeFileSync(
+      configPath,
+      '{\n  // no comments\n  "model": { "id": "openai/gpt-5.2" }\n}\n',
+      'utf8'
+    )
 
     expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/comments are not allowed/i)
   })
@@ -35,51 +39,88 @@ describe('config error handling', () => {
     expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/expected an object/)
   })
 
-  it('throws when auto is not an array', () => {
+  it('throws when model is a string (legacy)', () => {
     const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
     const configPath = join(root, '.summarize', 'config.json')
     mkdirSync(join(root, '.summarize'), { recursive: true })
-    writeFileSync(configPath, JSON.stringify({ model: 'auto', auto: { rules: [] } }), 'utf8')
+    writeFileSync(configPath, JSON.stringify({ model: 'openai/gpt-5.2' }), 'utf8')
 
-    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/\"auto\" must be an array/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/"model" must be an object/i)
   })
 
-  it('throws when auto[].when is not an array', () => {
+  it('throws when top-level auto is present (legacy)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
+    const configPath = join(root, '.summarize', 'config.json')
+    mkdirSync(join(root, '.summarize'), { recursive: true })
+    writeFileSync(configPath, JSON.stringify({ model: { mode: 'auto' }, auto: [] }), 'utf8')
+
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/top-level "auto"/i)
+  })
+
+  it('throws when model.rules is not an array', () => {
     const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
     const configPath = join(root, '.summarize', 'config.json')
     mkdirSync(join(root, '.summarize'), { recursive: true })
     writeFileSync(
       configPath,
-      JSON.stringify({ model: 'auto', auto: [{ when: { kind: 'video' }, candidates: ['openai/gpt-5-nano'] }] }),
+      JSON.stringify({ model: { mode: 'auto', rules: { nope: true } } }),
       'utf8'
     )
 
-    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/auto\[\]\.when.*must be an array/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(
+      /"model\.rules" must be an array/i
+    )
   })
 
-  it('throws when auto[].when is empty', () => {
+  it('throws when model.rules[].when is not an array', () => {
     const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
     const configPath = join(root, '.summarize', 'config.json')
     mkdirSync(join(root, '.summarize'), { recursive: true })
     writeFileSync(
       configPath,
-      JSON.stringify({ model: 'auto', auto: [{ when: [], candidates: ['openai/gpt-5-nano'] }] }),
+      JSON.stringify({
+        model: {
+          mode: 'auto',
+          rules: [{ when: { kind: 'video' }, candidates: ['openai/gpt-5-nano'] }],
+        },
+      }),
       'utf8'
     )
 
-    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/auto\[\]\.when.*must not be empty/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(
+      /model\.rules\[\]\.when.*must be an array/i
+    )
   })
 
-  it('throws when auto[].when contains unknown kinds', () => {
+  it('throws when model.rules[].when is empty', () => {
     const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
     const configPath = join(root, '.summarize', 'config.json')
     mkdirSync(join(root, '.summarize'), { recursive: true })
     writeFileSync(
       configPath,
-      JSON.stringify({ model: 'auto', auto: [{ when: ['nope'], candidates: ['openai/gpt-5-nano'] }] }),
+      JSON.stringify({
+        model: { mode: 'auto', rules: [{ when: [], candidates: ['openai/gpt-5-nano'] }] },
+      }),
       'utf8'
     )
 
-    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/unknown \"when\" kind/i)
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(
+      /model\.rules\[\]\.when.*must not be empty/i
+    )
+  })
+
+  it('throws when model.rules[].when contains unknown kinds', () => {
+    const root = mkdtempSync(join(tmpdir(), 'summarize-config-'))
+    const configPath = join(root, '.summarize', 'config.json')
+    mkdirSync(join(root, '.summarize'), { recursive: true })
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        model: { mode: 'auto', rules: [{ when: ['nope'], candidates: ['openai/gpt-5-nano'] }] },
+      }),
+      'utf8'
+    )
+
+    expect(() => loadSummarizeConfig({ env: { HOME: root } })).toThrow(/unknown "when" kind/i)
   })
 })

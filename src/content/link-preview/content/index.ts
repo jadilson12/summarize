@@ -23,8 +23,8 @@ import {
   safeHostname,
   selectBaseContent,
 } from './utils.js'
-import { extractYouTubeShortDescription } from './youtube.js'
 import { detectPrimaryVideoFromHtml } from './video.js'
+import { extractYouTubeShortDescription } from './youtube.js'
 
 const LEADING_CONTROL_PATTERN = /^[\\s\\p{Cc}]+/u
 const BLOCKED_HTML_HINT_PATTERN =

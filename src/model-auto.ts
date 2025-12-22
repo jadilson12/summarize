@@ -1,7 +1,10 @@
-import type { LiteLlmCatalog } from './pricing/litellm.js'
-import { resolveLiteLlmMaxInputTokensForModelId, resolveLiteLlmPricingForModelId } from './pricing/litellm.js'
-import type { AutoRule, AutoRuleCandidate, AutoRuleKind, SummarizeConfig } from './config.js'
+import type { AutoRule, AutoRuleKind, SummarizeConfig } from './config.js'
 import { normalizeGatewayStyleModelId, parseGatewayStyleModelId } from './llm/model-id.js'
+import type { LiteLlmCatalog } from './pricing/litellm.js'
+import {
+  resolveLiteLlmMaxInputTokensForModelId,
+  resolveLiteLlmPricingForModelId,
+} from './pricing/litellm.js'
 
 export type AutoSelectionInput = {
   kind: AutoRuleKind
@@ -19,47 +22,41 @@ export type AutoModelAttempt = {
   llmModelId: string
   openrouterProviders: string[] | null
   forceOpenRouter: boolean
-  requiredEnv: 'XAI_API_KEY' | 'OPENAI_API_KEY' | 'GEMINI_API_KEY' | 'ANTHROPIC_API_KEY' | 'OPENROUTER_API_KEY'
+  requiredEnv:
+    | 'XAI_API_KEY'
+    | 'OPENAI_API_KEY'
+    | 'GEMINI_API_KEY'
+    | 'ANTHROPIC_API_KEY'
+    | 'OPENROUTER_API_KEY'
   debug: string
 }
 
 const DEFAULT_RULES: AutoRule[] = [
   {
-    when: { kind: 'video' },
+    when: ['video'],
+    candidates: ['google/gemini-3-flash-preview', 'google/gemini-2.5-flash-lite-preview-09-2025'],
+  },
+  {
+    when: ['youtube'],
     candidates: [
-      { model: 'google/gemini-3-flash-preview' },
-      { model: 'google/gemini-2.5-flash-lite-preview-09-2025' },
+      'openai/gpt-5-nano',
+      'google/gemini-3-flash-preview',
+      'xai/grok-4-fast-non-reasoning',
     ],
   },
   {
-    when: { kind: 'youtube' },
-    candidates: [
-      { model: 'openai/gpt-5-nano' },
-      { model: 'google/gemini-3-flash-preview' },
-      { model: 'xai/grok-4-fast-non-reasoning' },
-    ],
+    when: ['website'],
+    candidates: ['openai/gpt-5-nano', 'openai/gpt-5.2', 'xai/grok-4-fast-non-reasoning'],
   },
   {
-    when: { kind: 'website' },
-    candidates: [
-      { model: 'openai/gpt-5-nano' },
-      { model: 'openai/gpt-5.2' },
-      { model: 'xai/grok-4-fast-non-reasoning' },
-    ],
-  },
-  {
-    when: { kind: 'text' },
-    candidates: [
-      { model: 'openai/gpt-5-nano' },
-      { model: 'openai/gpt-5.2' },
-      { model: 'xai/grok-4-fast-non-reasoning' },
-    ],
+    when: ['text'],
+    candidates: ['openai/gpt-5-nano', 'openai/gpt-5.2', 'xai/grok-4-fast-non-reasoning'],
   },
   {
     candidates: [
-      { model: 'openai/gpt-5-nano' },
-      { model: 'google/gemini-3-flash-preview' },
-      { model: 'xai/grok-4-fast-non-reasoning' },
+      'openai/gpt-5-nano',
+      'google/gemini-3-flash-preview',
+      'xai/grok-4-fast-non-reasoning',
     ],
   },
 ]
@@ -80,22 +77,82 @@ function requiredEnvForCandidate(modelId: string): AutoModelAttempt['requiredEnv
         : 'OPENAI_API_KEY'
 }
 
-function envHasKey(env: Record<string, string | undefined>, requiredEnv: AutoModelAttempt['requiredEnv']): boolean {
+function envHasKey(
+  env: Record<string, string | undefined>,
+  requiredEnv: AutoModelAttempt['requiredEnv']
+): boolean {
   if (requiredEnv === 'GEMINI_API_KEY') {
-    return Boolean(env.GEMINI_API_KEY?.trim() || env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || env.GOOGLE_API_KEY?.trim())
+    return Boolean(
+      env.GEMINI_API_KEY?.trim() ||
+        env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
+        env.GOOGLE_API_KEY?.trim()
+    )
   }
   return Boolean(env[requiredEnv]?.trim())
 }
 
-function resolveRuleCandidates(kind: AutoRuleKind, config: SummarizeConfig | null): AutoRuleCandidate[] {
-  const rules = config?.auto?.rules?.length ? config.auto.rules : DEFAULT_RULES
+function tokenMatchesBand({
+  promptTokens,
+  band,
+}: {
+  promptTokens: number | null
+  band: NonNullable<AutoRule['bands']>[number]
+}): boolean {
+  const token = band.token
+  if (!token) return true
+  if (typeof promptTokens !== 'number' || !Number.isFinite(promptTokens)) {
+    return typeof token.min !== 'number' && typeof token.max !== 'number'
+  }
+  const min = typeof token.min === 'number' ? token.min : 0
+  const max = typeof token.max === 'number' ? token.max : Number.POSITIVE_INFINITY
+  return promptTokens >= min && promptTokens <= max
+}
+
+function resolveRuleCandidates({
+  kind,
+  promptTokens,
+  config,
+}: {
+  kind: AutoRuleKind
+  promptTokens: number | null
+  config: SummarizeConfig | null
+}): string[] {
+  const rules = (() => {
+    const model = config?.model
+    if (
+      model &&
+      'mode' in model &&
+      model.mode === 'auto' &&
+      Array.isArray(model.rules) &&
+      model.rules.length > 0
+    ) {
+      return model.rules
+    }
+    return DEFAULT_RULES
+  })()
+
   for (const rule of rules) {
-    const whenKind = rule.when?.kind
-    if (!whenKind || whenKind === kind) {
+    const when = rule.when
+    if (Array.isArray(when) && when.length > 0 && !when.includes(kind)) {
+      continue
+    }
+
+    if (Array.isArray(rule.candidates) && rule.candidates.length > 0) {
       return rule.candidates
     }
+
+    const bands = rule.bands
+    if (Array.isArray(bands) && bands.length > 0) {
+      for (const band of bands) {
+        if (tokenMatchesBand({ promptTokens, band })) {
+          return band.candidates
+        }
+      }
+    }
   }
-  return DEFAULT_RULES[DEFAULT_RULES.length - 1].candidates
+
+  const fallback = DEFAULT_RULES[DEFAULT_RULES.length - 1]
+  return fallback.candidates ?? []
 }
 
 function estimateCostUsd({
@@ -108,9 +165,16 @@ function estimateCostUsd({
   outputTokens: number | null
 }): number | null {
   if (!pricing) return null
-  if (typeof pricing.inputUsdPerToken !== 'number' || typeof pricing.outputUsdPerToken !== 'number') return null
-  const inTok = typeof promptTokens === 'number' && Number.isFinite(promptTokens) && promptTokens > 0 ? promptTokens : 0
-  const outTok = typeof outputTokens === 'number' && Number.isFinite(outputTokens) && outputTokens > 0 ? outputTokens : 0
+  if (typeof pricing.inputUsdPerToken !== 'number' || typeof pricing.outputUsdPerToken !== 'number')
+    return null
+  const inTok =
+    typeof promptTokens === 'number' && Number.isFinite(promptTokens) && promptTokens > 0
+      ? promptTokens
+      : 0
+  const outTok =
+    typeof outputTokens === 'number' && Number.isFinite(outputTokens) && outputTokens > 0
+      ? outputTokens
+      : 0
   const cost = inTok * pricing.inputUsdPerToken + outTok * pricing.outputUsdPerToken
   return Number.isFinite(cost) ? cost : null
 }
@@ -125,28 +189,40 @@ function isVideoUnderstandingCapable(modelId: string): boolean {
 }
 
 export function buildAutoModelAttempts(input: AutoSelectionInput): AutoModelAttempt[] {
-  const candidates = resolveRuleCandidates(input.kind, input.config)
+  const candidates = resolveRuleCandidates({
+    kind: input.kind,
+    promptTokens: input.promptTokens,
+    config: input.config,
+  })
 
   const attempts: AutoModelAttempt[] = []
-  for (const candidate of candidates) {
-    const modelRaw = candidate.model.trim()
+  for (const modelRawEntry of candidates) {
+    const modelRaw = modelRawEntry.trim()
     if (modelRaw.length === 0) continue
 
     const explicitOpenRouter = isCandidateOpenRouter(modelRaw)
-    const requiredEnv = requiredEnvForCandidate(modelRaw)
 
     const shouldSkipForVideo =
-      input.requiresVideoUnderstanding && (explicitOpenRouter || !isVideoUnderstandingCapable(modelRaw))
+      input.requiresVideoUnderstanding &&
+      (explicitOpenRouter || !isVideoUnderstandingCapable(modelRaw))
     if (shouldSkipForVideo) {
       continue
     }
 
-    const addAttempt = (modelId: string, options: { openrouter: boolean; openrouterProviders: string[] | null }) => {
+    const addAttempt = (
+      modelId: string,
+      options: { openrouter: boolean; openrouterProviders: string[] | null }
+    ) => {
       const required = requiredEnvForCandidate(modelId)
       const hasKey = envHasKey(input.env, required)
 
       const catalog = input.catalog
-      const maxIn = catalog ? resolveLiteLlmMaxInputTokensForModelId(catalog, options.openrouter ? modelId.slice('openrouter/'.length) : modelId) : null
+      const maxIn = catalog
+        ? resolveLiteLlmMaxInputTokensForModelId(
+            catalog,
+            options.openrouter ? modelId.slice('openrouter/'.length) : modelId
+          )
+        : null
       const promptTokens = input.promptTokens
       if (
         typeof promptTokens === 'number' &&
@@ -160,7 +236,10 @@ export function buildAutoModelAttempts(input: AutoSelectionInput): AutoModelAtte
       }
 
       const pricing = catalog
-        ? resolveLiteLlmPricingForModelId(catalog, options.openrouter ? modelId.slice('openrouter/'.length) : modelId)
+        ? resolveLiteLlmPricingForModelId(
+            catalog,
+            options.openrouter ? modelId.slice('openrouter/'.length) : modelId
+          )
         : null
       const estimated = estimateCostUsd({
         pricing,
@@ -169,8 +248,12 @@ export function buildAutoModelAttempts(input: AutoSelectionInput): AutoModelAtte
       })
 
       const userModelId = options.openrouter ? modelId : normalizeGatewayStyleModelId(modelId)
-      const openrouterModelId = options.openrouter ? modelId.slice('openrouter/'.length).trim() : null
-      const llmModelId = options.openrouter ? `openai/${openrouterModelId}` : normalizeGatewayStyleModelId(modelId)
+      const openrouterModelId = options.openrouter
+        ? normalizeGatewayStyleModelId(modelId.slice('openrouter/'.length).trim())
+        : null
+      const llmModelId = options.openrouter
+        ? `openai/${openrouterModelId}`
+        : normalizeGatewayStyleModelId(modelId)
       const debugParts = [
         `model=${options.openrouter ? `openrouter/${openrouterModelId}` : userModelId}`,
         `order=${attempts.length + 1}`,
@@ -191,19 +274,26 @@ export function buildAutoModelAttempts(input: AutoSelectionInput): AutoModelAtte
     }
 
     if (explicitOpenRouter) {
-      const providers = candidate.openrouterProviders?.length ? candidate.openrouterProviders : input.openrouterProvidersFromEnv
-      addAttempt(modelRaw, { openrouter: true, openrouterProviders: providers })
+      addAttempt(modelRaw, {
+        openrouter: true,
+        openrouterProviders: input.openrouterProvidersFromEnv,
+      })
       continue
     }
 
-    addAttempt(modelRaw, { openrouter: false, openrouterProviders: input.openrouterProvidersFromEnv })
+    addAttempt(modelRaw, {
+      openrouter: false,
+      openrouterProviders: input.openrouterProvidersFromEnv,
+    })
 
     const canAddOpenRouterFallback =
       !input.requiresVideoUnderstanding && envHasKey(input.env, 'OPENROUTER_API_KEY')
     if (canAddOpenRouterFallback) {
       const slug = normalizeGatewayStyleModelId(modelRaw)
-      const providers = candidate.openrouterProviders?.length ? candidate.openrouterProviders : input.openrouterProvidersFromEnv
-      addAttempt(`openrouter/${slug}`, { openrouter: true, openrouterProviders: providers })
+      addAttempt(`openrouter/${slug}`, {
+        openrouter: true,
+        openrouterProviders: input.openrouterProvidersFromEnv,
+      })
     }
   }
 

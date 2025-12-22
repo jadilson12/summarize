@@ -39,4 +39,3 @@ describe('--model auto no-model footer', () => {
     expect(stderr.getText()).not.toMatch(/\bvia\b/i)
   })
 })
-

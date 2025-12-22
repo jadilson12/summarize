@@ -8,8 +8,6 @@ import { countTokens } from 'gpt-tokenizer'
 import { createLiveRenderer, render as renderMarkdownAnsi } from 'markdansi'
 import { normalizeTokenUsage, tallyCosts } from 'tokentally'
 import { loadSummarizeConfig } from './config.js'
-import { buildAutoModelAttempts } from './model-auto.js'
-import { parseRequestedModelId, type FixedModelSpec, type RequestedModel } from './model-spec.js'
 import {
   buildAssetPromptMessages,
   classifyUrl,
@@ -30,17 +28,19 @@ import {
   parseMaxOutputTokensArg,
   parseMetricsMode,
   parsePreprocessMode,
-  parseRetriesArg,
   parseRenderMode,
+  parseRetriesArg,
   parseStreamMode,
-  parseYoutubeMode,
   parseVideoMode,
+  parseYoutubeMode,
 } from './flags.js'
 import { generateTextWithModelId, streamTextWithModelId } from './llm/generate-text.js'
 import { resolveGoogleModelForUsage } from './llm/google-models.js'
 import { createHtmlToMarkdownConverter } from './llm/html-to-markdown.js'
-import { normalizeGatewayStyleModelId, parseGatewayStyleModelId } from './llm/model-id.js'
+import { parseGatewayStyleModelId } from './llm/model-id.js'
 import { convertToMarkdownWithMarkitdown, type ExecFileFn } from './markitdown.js'
+import { buildAutoModelAttempts } from './model-auto.js'
+import { type FixedModelSpec, parseRequestedModelId, type RequestedModel } from './model-spec.js'
 import {
   loadLiteLlmCatalog,
   resolveLiteLlmMaxInputTokensForModelId,
@@ -668,7 +668,12 @@ async function summarizeWithModelId({
   openrouter?: { providers: string[] | null }
   forceOpenRouter?: boolean
   retries: number
-  onRetry?: (notice: { attempt: number; maxRetries: number; delayMs: number; error: unknown }) => void
+  onRetry?: (notice: {
+    attempt: number
+    maxRetries: number
+    delayMs: number
+    error: unknown
+  }) => void
 }): Promise<{
   text: string
   provider: 'xai' | 'openai' | 'google' | 'anthropic'
@@ -1121,8 +1126,15 @@ export async function runCli(
     if (typeof env.SUMMARIZE_MODEL === 'string' && env.SUMMARIZE_MODEL.trim().length > 0) {
       return env.SUMMARIZE_MODEL.trim()
     }
-    if (typeof config?.model === 'string' && config.model.trim().length > 0) {
-      return config.model.trim()
+    const modelFromConfig = config?.model
+    if (modelFromConfig) {
+      if ('id' in modelFromConfig && typeof modelFromConfig.id === 'string') {
+        const id = modelFromConfig.id.trim()
+        if (id.length > 0) return id
+      }
+      if ('mode' in modelFromConfig && modelFromConfig.mode === 'auto') {
+        return 'auto'
+      }
     }
     return 'google/gemini-3-flash-preview'
   })()
@@ -1130,8 +1142,7 @@ export async function runCli(
   const requestedModel: RequestedModel = parseRequestedModelId(
     ((modelArg?.trim() ?? '') || resolvedDefaultModel).trim()
   )
-  const requestedModelLabel =
-    requestedModel.kind === 'auto' ? 'auto' : requestedModel.userModelId
+  const requestedModelLabel = requestedModel.kind === 'auto' ? 'auto' : requestedModel.userModelId
 
   const verboseColor = supportsColor(stderr, env)
   const effectiveStreamMode = (() => {
@@ -1188,7 +1199,11 @@ export async function runCli(
   const desiredOutputTokens = (() => {
     if (typeof maxOutputTokensArg === 'number') return maxOutputTokensArg
     const targetChars = resolveTargetCharacters(lengthArg)
-    if (!Number.isFinite(targetChars) || targetChars <= 0 || targetChars === Number.POSITIVE_INFINITY) {
+    if (
+      !Number.isFinite(targetChars) ||
+      targetChars <= 0 ||
+      targetChars === Number.POSITIVE_INFINITY
+    ) {
       return null
     }
     // Rough heuristic; used only for the "skip model when input is shorter than requested output" rule.
@@ -1200,7 +1215,12 @@ export async function runCli(
     llmModelId: string
     openrouterProviders: string[] | null
     forceOpenRouter: boolean
-    requiredEnv: 'XAI_API_KEY' | 'OPENAI_API_KEY' | 'GEMINI_API_KEY' | 'ANTHROPIC_API_KEY' | 'OPENROUTER_API_KEY'
+    requiredEnv:
+      | 'XAI_API_KEY'
+      | 'OPENAI_API_KEY'
+      | 'GEMINI_API_KEY'
+      | 'ANTHROPIC_API_KEY'
+      | 'OPENROUTER_API_KEY'
   }
 
   const envHasKeyFor = (requiredEnv: ModelAttempt['requiredEnv']) => {
@@ -1256,9 +1276,12 @@ export async function runCli(
       writeVerbose(stderr, verbose, modelResolution.note, verboseColor)
     }
     const parsedModelEffective = parseGatewayStyleModelId(modelResolution.modelId)
-    const streamingEnabledForCall = allowStreaming && streamingEnabled && !modelResolution.forceStreamOff
+    const streamingEnabledForCall =
+      allowStreaming && streamingEnabled && !modelResolution.forceStreamOff
 
-    const maxOutputTokensForCall = await resolveMaxOutputTokensForCall(parsedModelEffective.canonical)
+    const maxOutputTokensForCall = await resolveMaxOutputTokensForCall(
+      parsedModelEffective.canonical
+    )
     const maxInputTokensForCall = await resolveMaxInputTokensForCall(parsedModelEffective.canonical)
     if (
       typeof maxInputTokensForCall === 'number' &&
@@ -1369,7 +1392,10 @@ export async function runCli(
         })
         summary = result.text
         streamResult = null
-      } else if (parsedModelEffective.provider === 'google' && isGoogleStreamingUnsupportedError(error)) {
+      } else if (
+        parsedModelEffective.provider === 'google' &&
+        isGoogleStreamingUnsupportedError(error)
+      ) {
         writeVerbose(
           stderr,
           verbose,
@@ -1511,13 +1537,6 @@ export async function runCli(
     attachment: Awaited<ReturnType<typeof loadLocalAsset>>['attachment']
     onModelChosen?: ((modelId: string) => void) | null
   }) => {
-    const apiKeysForLlm = {
-      xaiApiKey,
-      openaiApiKey: apiKey,
-      googleApiKey: googleConfigured ? googleApiKey : null,
-      anthropicApiKey: anthropicConfigured ? anthropicApiKey : null,
-      openrouterApiKey: openrouterConfigured ? openrouterApiKey : null,
-    }
     const textContent = getTextContentFromAttachment(attachment)
     if (textContent && textContent.bytes > MAX_TEXT_BYTES_DEFAULT) {
       throw new Error(
@@ -1655,16 +1674,20 @@ export async function runCli(
       }
     }
 
-    const promptTokensForAuto = typeof promptPayload === 'string' ? countTokens(promptPayload) : null
-    const kind =
-      attachment.mediaType.toLowerCase().startsWith('video/')
-        ? ('video' as const)
-        : textContent
-          ? ('text' as const)
-          : ('file' as const)
+    const promptTokensForAuto =
+      typeof promptPayload === 'string' ? countTokens(promptPayload) : null
+    const kind = attachment.mediaType.toLowerCase().startsWith('video/')
+      ? ('video' as const)
+      : textContent
+        ? ('text' as const)
+        : ('file' as const)
     const requiresVideoUnderstanding = kind === 'video' && videoMode !== 'transcript'
     const extractedTextForNoModel =
-      kind === 'text' ? (usingPreprocessedMarkdown ? preprocessedMarkdown : textContent?.content ?? null) : null
+      kind === 'text'
+        ? usingPreprocessedMarkdown
+          ? preprocessedMarkdown
+          : (textContent?.content ?? null)
+        : null
 
     if (
       requestedModel.kind === 'auto' &&
@@ -1770,14 +1793,12 @@ export async function runCli(
       ]
     })()
 
-    let summaryResult:
-      | {
-          summary: string
-          summaryAlreadyPrinted: boolean
-          parsedModelEffective: ReturnType<typeof parseGatewayStyleModelId>
-          maxOutputTokensForCall: number | null
-        }
-      | null = null
+    let summaryResult: {
+      summary: string
+      summaryAlreadyPrinted: boolean
+      parsedModelEffective: ReturnType<typeof parseGatewayStyleModelId>
+      maxOutputTokensForCall: number | null
+    } | null = null
     let usedAttempt: ModelAttempt | null = null
     let lastError: unknown = null
 
@@ -1785,7 +1806,12 @@ export async function runCli(
       const hasKey = envHasKeyFor(attempt.requiredEnv)
       if (!hasKey) {
         if (requestedModel.kind === 'auto') {
-          writeVerbose(stderr, verbose, `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`, verboseColor)
+          writeVerbose(
+            stderr,
+            verbose,
+            `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`,
+            verboseColor
+          )
           continue
         }
         throw new Error(
@@ -1835,7 +1861,8 @@ export async function runCli(
       throw new Error('No model available for this input')
     }
 
-    const { summary, summaryAlreadyPrinted, parsedModelEffective, maxOutputTokensForCall } = summaryResult
+    const { summary, summaryAlreadyPrinted, parsedModelEffective, maxOutputTokensForCall } =
+      summaryResult
 
     const extracted = {
       kind: 'asset' as const,
@@ -2101,7 +2128,7 @@ export async function runCli(
     if (googleConfigured) {
       return { llmModelId: 'google/gemini-3-flash-preview', forceOpenRouter: false }
     }
-    if (Boolean(apiKey)) {
+    if (apiKey) {
       return { llmModelId: 'openai/gpt-5-nano', forceOpenRouter: false }
     }
     if (openrouterConfigured) {
@@ -2166,7 +2193,13 @@ export async function runCli(
     stderr,
     verbose,
     `configFile path=${formatOptionalString(configPath)} model=${formatOptionalString(
-      config?.model ?? null
+      (() => {
+        const model = config?.model
+        if (!model) return null
+        if ('id' in model) return model.id
+        if ('mode' in model && model.mode === 'auto') return 'auto'
+        return null
+      })()
     )}`,
     verboseColor
   )
@@ -2523,9 +2556,7 @@ export async function runCli(
         )
       }
       if (extracted.diagnostics.transcript.textProvided) {
-        footerBaseParts.push(
-          `transcript ${extracted.diagnostics.transcript.provider ?? 'unknown'}`
-        )
+        footerBaseParts.push(`transcript ${extracted.diagnostics.transcript.provider ?? 'unknown'}`)
       }
       if (extracted.isVideoOnly && extracted.video) {
         footerBaseParts.push(extracted.video.kind === 'youtube' ? 'video youtube' : 'video url')
@@ -2652,10 +2683,7 @@ export async function runCli(
               if (progressEnabled) spinner.setText(`Summarizing video (model: ${modelId})…`)
             },
           })
-          writeViaFooter([
-            ...footerBaseParts,
-            ...(chosenModel ? [`model ${chosenModel}`] : []),
-          ])
+          writeViaFooter([...footerBaseParts, ...(chosenModel ? [`model ${chosenModel}`] : [])])
           return
         }
       }
@@ -2927,17 +2955,17 @@ export async function runCli(
 
     const onModelChosen = (modelId: string) => {
       if (!progressEnabled) return
-      spinner.setText(`Summarizing (sent ${extractedContentSize}${viaSourceLabel}, model: ${modelId})…`)
+      spinner.setText(
+        `Summarizing (sent ${extractedContentSize}${viaSourceLabel}, model: ${modelId})…`
+      )
     }
 
-    let summaryResult:
-      | {
-          summary: string
-          summaryAlreadyPrinted: boolean
-          parsedModelEffective: ReturnType<typeof parseGatewayStyleModelId>
-          maxOutputTokensForCall: number | null
-        }
-      | null = null
+    let summaryResult: {
+      summary: string
+      summaryAlreadyPrinted: boolean
+      parsedModelEffective: ReturnType<typeof parseGatewayStyleModelId>
+      maxOutputTokensForCall: number | null
+    } | null = null
     let usedAttempt: ModelAttempt | null = null
     let lastError: unknown = null
 
@@ -2945,7 +2973,12 @@ export async function runCli(
       const hasKey = envHasKeyFor(attempt.requiredEnv)
       if (!hasKey) {
         if (requestedModel.kind === 'auto') {
-          writeVerbose(stderr, verbose, `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`, verboseColor)
+          writeVerbose(
+            stderr,
+            verbose,
+            `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`,
+            verboseColor
+          )
           continue
         }
         throw new Error(
@@ -3023,7 +3056,8 @@ export async function runCli(
       return
     }
 
-    const { summary, summaryAlreadyPrinted, parsedModelEffective, maxOutputTokensForCall } = summaryResult
+    const { summary, summaryAlreadyPrinted, parsedModelEffective, maxOutputTokensForCall } =
+      summaryResult
 
     if (json) {
       const finishReport = shouldComputeReport ? await buildReport() : null
@@ -3067,19 +3101,19 @@ export async function runCli(
         writeMetricsReport(finishReport)
       }
       stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
-        if (metricsEnabled && finishReport) {
-          const costUsd = await estimateCostUsd()
-          writeFinishLine({
-            stderr,
-            elapsedMs: Date.now() - runStartedAtMs,
-            model: usedAttempt.userModelId,
-            report: finishReport,
-            costUsd,
-            color: verboseColor,
-          })
-        }
-        return
+      if (metricsEnabled && finishReport) {
+        const costUsd = await estimateCostUsd()
+        writeFinishLine({
+          stderr,
+          elapsedMs: Date.now() - runStartedAtMs,
+          model: usedAttempt.userModelId,
+          report: finishReport,
+          costUsd,
+          color: verboseColor,
+        })
       }
+      return
+    }
 
     if (!summaryAlreadyPrinted) {
       clearProgressForStdout()

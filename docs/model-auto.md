@@ -20,7 +20,7 @@ You’ll still see a `via …` footer when non-trivial extraction happened (Fire
 Model ids:
 
 - Native: `<provider>/<model>` (e.g. `openai/gpt-5-nano`, `google/gemini-3-flash-preview`)
-- Forced OpenRouter: `openrouter/<openrouter-model-id>` (e.g. `openrouter/openai/gpt-5-nano`)
+- Forced OpenRouter: `openrouter/<provider>/<model>` (e.g. `openrouter/openai/gpt-5-nano`)
 
 Behavior:
 
@@ -30,11 +30,10 @@ Behavior:
 OpenRouter provider ordering:
 
 - Global default: `OPENROUTER_PROVIDERS="groq,google-vertex,..."` (optional)
-- Per-candidate: `openrouterProviders` in config (optional)
 
 ## How selection works
 
-- Uses the order you provide in `auto[].candidates[]`.
+- Uses the order you provide in `model.rules[].candidates[]` (or `bands[].candidates[]`).
 - Filters out candidates that can’t fit the prompt (max input tokens, LiteLLM catalog).
 - For a native candidate, auto mode may add an OpenRouter fallback attempt right after it (when `OPENROUTER_API_KEY` is set and video understanding isn’t required).
 
@@ -49,28 +48,43 @@ Default config file: `~/.summarize/config.json`
 
 This file is parsed leniently (JSON5), but **comments are not allowed**.
 
-`auto` must be an array. Legacy `auto: { "rules": [...] }` is not supported.
+`model.rules` is optional; when omitted, built-in defaults apply.
 
-`auto[].when` is optional, and when present must be an array (e.g. `["video","youtube"]`).
+`model.rules[].when` is optional, and when present must be an array (e.g. `["video","youtube"]`).
+
+Rules can be either:
+
+- `candidates: string[]`
+- `bands: [{ token?: { min?: number; max?: number }, candidates: string[] }]`
 
 Example:
 
 ```json
 {
-  "model": "auto",
-  "media": { "videoMode": "auto" },
-  "auto": [
-    {
-      "when": ["video"],
-      "candidates": ["google/gemini-3-flash-preview"]
-    },
-    {
-      "when": ["website", "youtube"],
-      "candidates": ["openai/gpt-5-nano", "xai/grok-4-fast-non-reasoning"]
-    },
-    {
-      "candidates": ["openai/gpt-5-nano", "openrouter/openai/gpt-5-nano"]
-    }
-  ]
+  "model": {
+    "mode": "auto",
+    "rules": [
+      {
+        "when": ["video"],
+        "candidates": ["google/gemini-3-flash-preview"]
+      },
+      {
+        "when": ["website", "youtube"],
+        "bands": [
+          {
+            "token": { "max": 8000 },
+            "candidates": ["openai/gpt-5-nano"]
+          },
+          {
+            "candidates": ["xai/grok-4-fast-non-reasoning"]
+          }
+        ]
+      },
+      {
+        "candidates": ["openai/gpt-5-nano", "openrouter/openai/gpt-5-nano"]
+      }
+    ]
+  },
+  "media": { "videoMode": "auto" }
 }
 ```

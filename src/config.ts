@@ -7,38 +7,44 @@ import JSON5 from 'json5'
 export type AutoRuleKind = 'text' | 'website' | 'youtube' | 'image' | 'video' | 'file'
 export type VideoMode = 'auto' | 'transcript' | 'understand'
 
-export type AutoRuleCandidate = {
+export type AutoRule = {
   /**
-   * Model id.
+   * Input kinds this rule applies to.
+   *
+   * Omit for "catch-all".
+   */
+  when?: AutoRuleKind[]
+
+  /**
+   * Candidate model ids (ordered).
    *
    * - Native: `openai/...`, `google/...`, `xai/...`, `anthropic/...`
-   * - OpenRouter (forced): `openrouter/<openrouter-model-id>` (e.g. `openrouter/openai/gpt-5-nano`)
+   * - OpenRouter (forced): `openrouter/<provider>/<model>` (e.g. `openrouter/openai/gpt-5-nano`)
    */
-  model: string
-  openrouterProviders?: string[]
-  score?: {
-    quality?: number
-    speed?: number
-    cost?: number
-  }
+  candidates?: string[]
+
+  /**
+   * Token-based candidate selection (ordered).
+   *
+   * First matching band wins.
+   */
+  bands?: Array<{
+    token?: { min?: number; max?: number }
+    candidates: string[]
+  }>
 }
 
-export type AutoRule = {
-  when?: { kind?: AutoRuleKind }
-  candidates: AutoRuleCandidate[]
-}
+export type ModelConfig =
+  | {
+      id: string
+    }
+  | {
+      mode: 'auto'
+      rules?: AutoRule[]
+    }
 
 export type SummarizeConfig = {
-  /**
-   * Gateway-style model id, e.g.:
-   * - google/gemini-3-flash-preview
-   * - openai/gpt-5.2
-   * - google/gemini-2.0-flash
-   */
-  model?: string
-  auto?: {
-    rules?: AutoRule[]
-  }
+  model?: ModelConfig
   media?: {
     videoMode?: VideoMode
   }
@@ -61,11 +67,11 @@ function parseAutoRuleKind(value: unknown): AutoRuleKind | null {
 
 function parseWhenKinds(raw: unknown, path: string): AutoRuleKind[] {
   if (!Array.isArray(raw)) {
-    throw new Error(`Invalid config file ${path}: "auto[].when" must be an array of kinds.`)
+    throw new Error(`Invalid config file ${path}: "model.rules[].when" must be an array of kinds.`)
   }
 
   if (raw.length === 0) {
-    throw new Error(`Invalid config file ${path}: "auto[].when" must not be empty.`)
+    throw new Error(`Invalid config file ${path}: "model.rules[].when" must not be empty.`)
   }
 
   const kinds: AutoRuleKind[] = []
@@ -78,6 +84,71 @@ function parseWhenKinds(raw: unknown, path: string): AutoRuleKind[] {
   }
 
   return kinds
+}
+
+function parseModelCandidates(raw: unknown, path: string): string[] {
+  if (!Array.isArray(raw)) {
+    throw new Error(
+      `Invalid config file ${path}: "model.rules[].candidates" must be an array of strings.`
+    )
+  }
+  const candidates: string[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'string') {
+      throw new Error(
+        `Invalid config file ${path}: "model.rules[].candidates" must be an array of strings.`
+      )
+    }
+    const trimmed = entry.trim()
+    if (trimmed.length === 0) continue
+    candidates.push(trimmed)
+  }
+  if (candidates.length === 0) {
+    throw new Error(`Invalid config file ${path}: "model.rules[].candidates" must not be empty.`)
+  }
+  return candidates
+}
+
+function parseTokenBand(
+  raw: unknown,
+  path: string
+): { token?: { min?: number; max?: number }; candidates: string[] } {
+  if (!isRecord(raw)) {
+    throw new Error(`Invalid config file ${path}: "model.rules[].bands[]" must be an object.`)
+  }
+
+  const candidates = parseModelCandidates(raw.candidates, path)
+
+  const token = (() => {
+    if (typeof raw.token === 'undefined') return undefined
+    if (!isRecord(raw.token)) {
+      throw new Error(
+        `Invalid config file ${path}: "model.rules[].bands[].token" must be an object.`
+      )
+    }
+    const min = typeof raw.token.min === 'number' ? raw.token.min : undefined
+    const max = typeof raw.token.max === 'number' ? raw.token.max : undefined
+
+    if (typeof min === 'number' && (!Number.isFinite(min) || min < 0)) {
+      throw new Error(
+        `Invalid config file ${path}: "model.rules[].bands[].token.min" must be >= 0.`
+      )
+    }
+    if (typeof max === 'number' && (!Number.isFinite(max) || max < 0)) {
+      throw new Error(
+        `Invalid config file ${path}: "model.rules[].bands[].token.max" must be >= 0.`
+      )
+    }
+    if (typeof min === 'number' && typeof max === 'number' && min > max) {
+      throw new Error(
+        `Invalid config file ${path}: "model.rules[].bands[].token.min" must be <= "token.max".`
+      )
+    }
+
+    return typeof min === 'number' || typeof max === 'number' ? { min, max } : undefined
+  })()
+
+  return { ...(token ? { token } : {}), candidates }
 }
 
 function assertNoComments(raw: string, path: string): void {
@@ -169,74 +240,94 @@ export function loadSummarizeConfig({ env }: { env: Record<string, string | unde
     throw new Error(`Invalid config file ${path}: expected an object at the top level`)
   }
 
-  const model = typeof parsed.model === 'string' ? parsed.model : undefined
+  if (typeof parsed.model === 'string') {
+    throw new Error(
+      `Invalid config file ${path}: "model" must be an object (e.g. { "id": "openai/gpt-5.2" } or { "mode": "auto" }).`
+    )
+  }
+  if (typeof parsed.auto !== 'undefined') {
+    throw new Error(
+      `Invalid config file ${path}: legacy top-level "auto" is not supported (use "model": { "mode": "auto", "rules": [...] }).`
+    )
+  }
 
-  const auto = (() => {
-    const value = parsed.auto
-
-    if (typeof value === 'undefined') return undefined
-    if (!Array.isArray(value)) {
-      throw new Error(`Invalid config file ${path}: "auto" must be an array.`)
+  const model = (() => {
+    const raw = parsed.model
+    if (typeof raw === 'undefined') return undefined
+    if (!isRecord(raw)) {
+      throw new Error(`Invalid config file ${path}: "model" must be an object.`)
     }
 
-    const rules: AutoRule[] = []
-    for (const entry of value) {
-      if (!isRecord(entry)) continue
-      const candidatesRaw = entry.candidates
-      if (!Array.isArray(candidatesRaw) || candidatesRaw.length === 0) continue
-      const candidates: AutoRuleCandidate[] = []
-      for (const c of candidatesRaw) {
-        const modelId =
-          typeof c === 'string'
-            ? c
-            : isRecord(c) && typeof c.model === 'string'
-              ? c.model
-              : null
-        if (!modelId || modelId.trim().length === 0) continue
-
-        const openrouterProviders =
-          isRecord(c) && Array.isArray(c.openrouterProviders)
-            ? c.openrouterProviders.filter((p) => typeof p === 'string' && p.trim().length > 0)
-            : undefined
-        const score =
-          isRecord(c) && isRecord(c.score)
-            ? {
-                quality: typeof c.score.quality === 'number' ? c.score.quality : undefined,
-                speed: typeof c.score.speed === 'number' ? c.score.speed : undefined,
-                cost: typeof c.score.cost === 'number' ? c.score.cost : undefined,
-              }
-            : undefined
-
-        candidates.push({
-          model: modelId,
-          ...(openrouterProviders ? { openrouterProviders } : {}),
-          ...(score ? { score } : {}),
-        })
+    if (typeof raw.id === 'string') {
+      const id = raw.id.trim()
+      if (id.length === 0) {
+        throw new Error(`Invalid config file ${path}: "model.id" must not be empty.`)
       }
-      if (candidates.length === 0) continue
-
-      if (typeof entry.when === 'undefined') {
-        rules.push({ candidates })
-        continue
-      }
-
-      const whenKinds = parseWhenKinds(entry.when, path)
-      for (const kind of whenKinds) {
-        rules.push({ when: { kind }, candidates })
-      }
+      return { id } satisfies ModelConfig
     }
-    return rules.length > 0 ? { rules } : undefined
+
+    if (raw.mode === 'auto') {
+      const rules = (() => {
+        if (typeof raw.rules === 'undefined') return undefined
+        if (!Array.isArray(raw.rules)) {
+          throw new Error(`Invalid config file ${path}: "model.rules" must be an array.`)
+        }
+        const rulesParsed: AutoRule[] = []
+        for (const entry of raw.rules) {
+          if (!isRecord(entry)) continue
+          const when =
+            typeof entry.when === 'undefined' ? undefined : parseWhenKinds(entry.when, path)
+
+          const hasCandidates = typeof entry.candidates !== 'undefined'
+          const hasBands = typeof entry.bands !== 'undefined'
+          if (hasCandidates && hasBands) {
+            throw new Error(
+              `Invalid config file ${path}: "model.rules[]" must use either "candidates" or "bands" (not both).`
+            )
+          }
+
+          if (hasCandidates) {
+            const candidates = parseModelCandidates(entry.candidates, path)
+            rulesParsed.push({ ...(when ? { when } : {}), candidates })
+            continue
+          }
+
+          if (hasBands) {
+            if (!Array.isArray(entry.bands) || entry.bands.length === 0) {
+              throw new Error(
+                `Invalid config file ${path}: "model.rules[].bands" must be a non-empty array.`
+              )
+            }
+            const bands = entry.bands.map((b) => parseTokenBand(b, path))
+            rulesParsed.push({ ...(when ? { when } : {}), bands })
+            continue
+          }
+
+          throw new Error(
+            `Invalid config file ${path}: "model.rules[]" must include "candidates" or "bands".`
+          )
+        }
+        return rulesParsed
+      })()
+      return { mode: 'auto', ...(rules ? { rules } : {}) } satisfies ModelConfig
+    }
+
+    throw new Error(
+      `Invalid config file ${path}: "model" must include either "id" or { "mode": "auto" }.`
+    )
   })()
 
   const media = (() => {
     const value = parsed.media
     if (!isRecord(value)) return undefined
     const videoMode =
-      value.videoMode === 'auto' || value.videoMode === 'transcript' || value.videoMode === 'understand'
+      value.videoMode === 'auto' ||
+      value.videoMode === 'transcript' ||
+      value.videoMode === 'understand'
         ? (value.videoMode as VideoMode)
         : undefined
     return videoMode ? { videoMode } : undefined
   })()
 
-  return { config: { model, ...(auto ? { auto } : {}), ...(media ? { media } : {}) }, path }
+  return { config: { ...(model ? { model } : {}), ...(media ? { media } : {}) }, path }
 }

@@ -20,9 +20,7 @@ export type FixedModelSpec =
       requiredEnv: 'OPENROUTER_API_KEY'
     }
 
-export type RequestedModel =
-  | { kind: 'auto' }
-  | ({ kind: 'fixed' } & FixedModelSpec)
+export type RequestedModel = { kind: 'auto' } | ({ kind: 'fixed' } & FixedModelSpec)
 
 export function parseRequestedModelId(raw: string): RequestedModel {
   const trimmed = raw.trim()

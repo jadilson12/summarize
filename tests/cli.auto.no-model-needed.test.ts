@@ -48,4 +48,3 @@ describe('--model auto no-model-needed', () => {
     expect(streamTextMock).not.toHaveBeenCalled()
   })
 })
-

@@ -128,7 +128,9 @@ function resolveOpenAiClientConfig({
     isOpenRouterViaBaseUrl ||
     (hasOpenRouterKey && !baseUrl && !hasOpenAiKey)
 
-  const apiKey = isOpenRouter ? apiKeys.openrouterApiKey ?? apiKeys.openaiApiKey : apiKeys.openaiApiKey
+  const apiKey = isOpenRouter
+    ? (apiKeys.openrouterApiKey ?? apiKeys.openaiApiKey)
+    : apiKeys.openaiApiKey
   if (!apiKey) {
     throw new Error(
       isOpenRouter
@@ -151,7 +153,7 @@ function resolveOpenAiClientConfig({
 
   const baseURL = forceOpenRouter
     ? 'https://openrouter.ai/api/v1'
-    : baseUrl ?? (isOpenRouter ? 'https://openrouter.ai/api/v1' : undefined)
+    : (baseUrl ?? (isOpenRouter ? 'https://openrouter.ai/api/v1' : undefined))
 
   return {
     apiKey,
@@ -272,7 +274,12 @@ export async function generateTextWithModelId({
       }
 
       const { createOpenAI } = await import('@ai-sdk/openai')
-      const openaiConfig = resolveOpenAiClientConfig({ apiKeys, openrouter, fetchImpl })
+      const openaiConfig = resolveOpenAiClientConfig({
+        apiKeys,
+        openrouter,
+        fetchImpl,
+        forceOpenRouter,
+      })
       const openai = createOpenAI({
         apiKey: openaiConfig.apiKey,
         ...(openaiConfig.baseURL ? { baseURL: openaiConfig.baseURL } : {}),
@@ -526,7 +533,12 @@ export async function streamTextWithModelId({
     }
 
     const { createOpenAI } = await import('@ai-sdk/openai')
-    const openaiConfig = resolveOpenAiClientConfig({ apiKeys, openrouter, fetchImpl, forceOpenRouter })
+    const openaiConfig = resolveOpenAiClientConfig({
+      apiKeys,
+      openrouter,
+      fetchImpl,
+      forceOpenRouter,
+    })
     const openai = createOpenAI({
       apiKey: openaiConfig.apiKey,
       ...(openaiConfig.baseURL ? { baseURL: openaiConfig.baseURL } : {}),

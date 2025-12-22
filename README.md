@@ -165,14 +165,14 @@ Supported keys today:
 
 ```json
 {
-  "model": "openai/gpt-5.2"
+  "model": { "id": "openai/gpt-5.2" }
 }
 ```
 
 Also supported:
 
-- `model: "auto"` (automatic model selection + fallback)
-- `auto.rules` (customize candidates / ordering)
+- `model: { "mode": "auto" }` (automatic model selection + fallback; see `docs/model-auto.md`)
+- `model.rules` (customize candidates / ordering)
 - `media.videoMode: "auto"|"transcript"|"understand"`
 
 Note: the config is parsed leniently (JSON5), but **comments are not allowed**.
