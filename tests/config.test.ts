@@ -30,9 +30,9 @@ describe('config loading', () => {
         model: 'auto',
         media: { videoMode: 'auto' },
         auto: [
-          { when: 'video', candidates: ['google/gemini-3-flash-preview'] },
+          { when: ['video'], candidates: ['google/gemini-3-flash-preview'] },
           {
-            when: 'youtube, website',
+            when: ['youtube', 'website'],
             candidates: ['openai/gpt-5-nano', { model: 'xai/grok-4-fast-non-reasoning', openrouterProviders: ['groq'] }],
           },
           { candidates: ['openai/gpt-5-nano', 'openrouter/openai/gpt-5-nano'] },

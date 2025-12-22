@@ -40,11 +40,11 @@ Additional keys (optional):
   "media": { "videoMode": "auto" },
   "auto": [
     {
-      "when": "video",
+      "when": ["video"],
       "candidates": ["google/gemini-3-flash-preview"]
     },
     {
-      "when": "website, youtube",
+      "when": ["website", "youtube"],
       "candidates": ["openai/gpt-5-nano", "xai/grok-4-fast-non-reasoning"]
     },
     {
@@ -58,3 +58,4 @@ Notes:
 
 - Parsed leniently (JSON5), but **comments are not allowed**.
 - `auto` must be an array. Legacy `auto: { "rules": [...] }` is not supported.
+- `auto[].when` (optional) must be an array (e.g. `["video","youtube"]`).

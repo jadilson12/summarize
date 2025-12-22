@@ -59,21 +59,20 @@ function parseAutoRuleKind(value: unknown): AutoRuleKind | null {
     : null
 }
 
-function parseWhenKinds(text: string, path: string): AutoRuleKind[] {
-  const rawParts = text
-    .split(/[,\s]+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
+function parseWhenKinds(raw: unknown, path: string): AutoRuleKind[] {
+  if (!Array.isArray(raw)) {
+    throw new Error(`Invalid config file ${path}: "auto[].when" must be an array of kinds.`)
+  }
 
-  if (rawParts.length === 0) {
-    throw new Error(`Invalid config file ${path}: "when" must not be empty.`)
+  if (raw.length === 0) {
+    throw new Error(`Invalid config file ${path}: "auto[].when" must not be empty.`)
   }
 
   const kinds: AutoRuleKind[] = []
-  for (const part of rawParts) {
-    const kind = parseAutoRuleKind(part)
+  for (const entry of raw) {
+    const kind = parseAutoRuleKind(entry)
     if (!kind) {
-      throw new Error(`Invalid config file ${path}: unknown "when" kind "${part}".`)
+      throw new Error(`Invalid config file ${path}: unknown "when" kind "${String(entry)}".`)
     }
     if (!kinds.includes(kind)) kinds.push(kind)
   }
@@ -219,10 +218,6 @@ export function loadSummarizeConfig({ env }: { env: Record<string, string | unde
       if (typeof entry.when === 'undefined') {
         rules.push({ candidates })
         continue
-      }
-
-      if (typeof entry.when !== 'string') {
-        throw new Error(`Invalid config file ${path}: "auto[].when" must be a string.`)
       }
 
       const whenKinds = parseWhenKinds(entry.when, path)
