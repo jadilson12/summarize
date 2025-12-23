@@ -264,7 +264,7 @@ Flags:
 
 - `--runs 3` (default): timing runs per selected model (median/avg)
 - `--smart 3` (default): how many “smart-first” picks (rest filled by fastest)
-- `--min-b 27` (default): ignore models with inferred size smaller than N billion parameters
+- `--min-params 27b` (default): ignore models with inferred size smaller than N billion parameters
 
 Example:
 
