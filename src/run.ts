@@ -437,7 +437,7 @@ function buildProgram() {
     .option(
       '--length <length>',
       'Summary length: short|medium|long|xl|xxl or a character limit like 20000, 20k',
-      'medium'
+      'long'
     )
     .option(
       '--max-output-tokens <count>',

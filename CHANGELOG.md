@@ -14,6 +14,7 @@
 - `cli.enabled` is an allowlist for CLI usage.
 - Remove support for `cli.disabled` and `cli.<provider>.enabled`.
 - OpenRouter: stop sending provider-order headers.
+- Default summary length is now `long`.
 - Document CLI ordering + disable options in README and CLI/auto docs.
 - `--model free`: when OpenRouter rejects routing with “No allowed providers”, print the exact provider names to allow.
 
