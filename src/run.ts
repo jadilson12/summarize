@@ -941,13 +941,15 @@ function writeFinishLine({
   const tokPart =
     promptTokens !== null || completionTokens !== null || totalTokens !== null
       ? `tok(i/o/t)=${promptTokens?.toLocaleString() ?? 'unknown'}/${completionTokens?.toLocaleString() ?? 'unknown'}/${totalTokens?.toLocaleString() ?? 'unknown'}`
-      : 'tok(i/o/t)=unknown'
+      : null
 
-  const parts: string[] = [
-    model,
-    costUsd != null ? `cost=${formatUSD(costUsd)}` : 'cost=N/A',
-    tokPart,
-  ]
+  const parts: string[] = [model]
+  if (costUsd != null) {
+    parts.push(`cost=${formatUSD(costUsd)}`)
+  }
+  if (tokPart) {
+    parts.push(tokPart)
+  }
 
   if (report.services.firecrawl.requests > 0) {
     parts.push(`firecrawl=${report.services.firecrawl.requests}`)
@@ -1159,31 +1161,48 @@ export async function runCli(
   }
 
   const estimateCostUsd = async (): Promise<number | null> => {
-    const catalog = await getLiteLlmCatalog()
-    if (!catalog) return null
-    const calls = llmCalls.map((call) => {
-      const promptTokens = call.usage?.promptTokens ?? null
-      const completionTokens = call.usage?.completionTokens ?? null
-      const hasTokens =
-        typeof promptTokens === 'number' &&
-        Number.isFinite(promptTokens) &&
-        typeof completionTokens === 'number' &&
-        Number.isFinite(completionTokens)
-      const usage = hasTokens
-        ? normalizeTokenUsage({
-            inputTokens: promptTokens,
-            outputTokens: completionTokens,
-            totalTokens: call.usage?.totalTokens ?? undefined,
-          })
-        : null
-      return { model: call.model, usage }
-    })
+    const explicitCosts = llmCalls
+      .map((call) =>
+        typeof call.costUsd === 'number' && Number.isFinite(call.costUsd) ? call.costUsd : null
+      )
+      .filter((value): value is number => typeof value === 'number')
+    const explicitTotal =
+      explicitCosts.length > 0 ? explicitCosts.reduce((sum, value) => sum + value, 0) : 0
 
+    const calls = llmCalls
+      .filter((call) => !(typeof call.costUsd === 'number' && Number.isFinite(call.costUsd)))
+      .map((call) => {
+        const promptTokens = call.usage?.promptTokens ?? null
+        const completionTokens = call.usage?.completionTokens ?? null
+        const hasTokens =
+          typeof promptTokens === 'number' &&
+          Number.isFinite(promptTokens) &&
+          typeof completionTokens === 'number' &&
+          Number.isFinite(completionTokens)
+        const usage = hasTokens
+          ? normalizeTokenUsage({
+              inputTokens: promptTokens,
+              outputTokens: completionTokens,
+              totalTokens: call.usage?.totalTokens ?? undefined,
+            })
+          : null
+        return { model: call.model, usage }
+      })
+    if (calls.length === 0) {
+      return explicitCosts.length > 0 ? explicitTotal : null
+    }
+
+    const catalog = await getLiteLlmCatalog()
+    if (!catalog) {
+      return explicitCosts.length > 0 ? explicitTotal : null
+    }
     const result = await tallyCosts({
       calls,
       resolvePricing: (modelId) => resolveLiteLlmPricingForModelId(catalog, modelId),
     })
-    return result.total?.totalUsd ?? null
+    const catalogTotal = result.total?.totalUsd ?? null
+    if (catalogTotal === null && explicitCosts.length === 0) return null
+    return (catalogTotal ?? 0) + explicitTotal
   }
   const buildReport = async () => {
     return buildRunMetricsReport({ llmCalls, firecrawlRequests, apifyRequests })
@@ -1406,6 +1425,15 @@ export async function runCli(
       })
       const summary = result.text.trim()
       if (!summary) throw new Error('CLI returned an empty summary')
+      if (result.usage || typeof result.costUsd === 'number') {
+        llmCalls.push({
+          provider: 'cli',
+          model: attempt.userModelId,
+          usage: result.usage ?? null,
+          costUsd: result.costUsd ?? null,
+          purpose: 'summary',
+        })
+      }
       return {
         summary,
         summaryAlreadyPrinted: false,

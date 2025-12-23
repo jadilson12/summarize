@@ -26,7 +26,18 @@ describe('runCliModel', () => {
     const seen: string[][] = []
     const execFileImpl = makeStub((args) => {
       seen.push(args)
-      return { stdout: JSON.stringify({ result: 'ok' }) }
+      return {
+        stdout: JSON.stringify({
+          result: 'ok',
+          total_cost_usd: 0.0125,
+          usage: {
+            input_tokens: 4,
+            cache_creation_input_tokens: 1,
+            cache_read_input_tokens: 2,
+            output_tokens: 3,
+          },
+        }),
+      }
     })
     const result = await runCliModel({
       provider: 'claude',
@@ -39,6 +50,12 @@ describe('runCliModel', () => {
       config: null,
     })
     expect(result.text).toBe('ok')
+    expect(result.costUsd).toBe(0.0125)
+    expect(result.usage).toEqual({
+      promptTokens: 7,
+      completionTokens: 3,
+      totalTokens: 10,
+    })
     expect(seen[0]?.includes('--tools')).toBe(true)
     expect(seen[0]?.includes('--dangerously-skip-permissions')).toBe(true)
   })
@@ -47,7 +64,18 @@ describe('runCliModel', () => {
     const seen: string[][] = []
     const execFileImpl = makeStub((args) => {
       seen.push(args)
-      return { stdout: JSON.stringify({ response: 'ok' }) }
+      return {
+        stdout: JSON.stringify({
+          response: 'ok',
+          stats: {
+            models: {
+              'gemini-3-flash-preview': {
+                tokens: { prompt: 5, candidates: 7, total: 12 },
+              },
+            },
+          },
+        }),
+      }
     })
     const result = await runCliModel({
       provider: 'gemini',
@@ -60,6 +88,11 @@ describe('runCliModel', () => {
       config: null,
     })
     expect(result.text).toBe('ok')
+    expect(result.usage).toEqual({
+      promptTokens: 5,
+      completionTokens: 7,
+      totalTokens: 12,
+    })
     expect(seen[0]?.includes('--yolo')).toBe(true)
   })
 

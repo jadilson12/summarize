@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import type { CliConfig, CliProvider } from '../config.js'
 import type { ExecFileFn } from '../markitdown.js'
+import type { LlmTokenUsage } from './generate-text.js'
 
 const DEFAULT_BINARIES: Record<CliProvider, string> = {
   claude: 'claude',
@@ -23,6 +24,12 @@ type RunCliModelOptions = {
   config: CliConfig | null
   cwd?: string
   extraArgs?: string[]
+}
+
+type CliRunResult = {
+  text: string
+  usage: LlmTokenUsage | null
+  costUsd: number | null
 }
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -99,6 +106,152 @@ async function execCliWithInput({
   })
 }
 
+const parseJsonFromOutput = (output: string): unknown | null => {
+  const trimmed = output.trim()
+  if (!trimmed) return null
+  if (trimmed.startsWith('{')) {
+    try {
+      return JSON.parse(trimmed) as unknown
+    } catch {
+      // fall through
+    }
+  }
+  const lastBraceIndex = trimmed.lastIndexOf('\n{')
+  if (lastBraceIndex >= 0) {
+    const candidate = trimmed.slice(lastBraceIndex + 1).trim()
+    try {
+      return JSON.parse(candidate) as unknown
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+const toNumber = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return value
+}
+
+const parseClaudeUsage = (payload: Record<string, unknown>): LlmTokenUsage | null => {
+  const usage = payload.usage
+  if (!usage || typeof usage !== 'object') return null
+  const usageRecord = usage as Record<string, unknown>
+  const inputTokens = toNumber(usageRecord.input_tokens)
+  const cacheCreationTokens = toNumber(usageRecord.cache_creation_input_tokens) ?? 0
+  const cacheReadTokens = toNumber(usageRecord.cache_read_input_tokens) ?? 0
+  const outputTokens = toNumber(usageRecord.output_tokens)
+  if (inputTokens === null && outputTokens === null) return null
+  const promptTokens =
+    inputTokens !== null ? inputTokens + cacheCreationTokens + cacheReadTokens : null
+  const completionTokens = outputTokens
+  const totalTokens =
+    typeof promptTokens === 'number' && typeof completionTokens === 'number'
+      ? promptTokens + completionTokens
+      : null
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+  }
+}
+
+const parseGeminiUsage = (payload: Record<string, unknown>): LlmTokenUsage | null => {
+  const stats = payload.stats
+  if (!stats || typeof stats !== 'object') return null
+  const models = (stats as Record<string, unknown>).models
+  if (!models || typeof models !== 'object') return null
+  let promptSum = 0
+  let completionSum = 0
+  let totalSum = 0
+  let hasPrompt = false
+  let hasCompletion = false
+  let hasTotal = false
+  for (const entry of Object.values(models as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object') continue
+    const tokens = (entry as Record<string, unknown>).tokens
+    if (!tokens || typeof tokens !== 'object') continue
+    const prompt = toNumber((tokens as Record<string, unknown>).prompt)
+    const candidates = toNumber((tokens as Record<string, unknown>).candidates)
+    const total = toNumber((tokens as Record<string, unknown>).total)
+    if (typeof prompt === 'number') {
+      promptSum += prompt
+      hasPrompt = true
+    }
+    if (typeof candidates === 'number') {
+      completionSum += candidates
+      hasCompletion = true
+    }
+    if (typeof total === 'number') {
+      totalSum += total
+      hasTotal = true
+    }
+  }
+  if (!hasPrompt && !hasCompletion && !hasTotal) return null
+  const promptTokens = hasPrompt ? promptSum : null
+  const completionTokens = hasCompletion ? completionSum : null
+  const totalTokens =
+    hasTotal && totalSum > 0
+      ? totalSum
+      : typeof promptTokens === 'number' && typeof completionTokens === 'number'
+        ? promptTokens + completionTokens
+        : null
+  return { promptTokens, completionTokens, totalTokens }
+}
+
+const parseCodexUsageFromJsonl = (
+  output: string
+): { usage: LlmTokenUsage | null; costUsd: number | null } => {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+  let usage: LlmTokenUsage | null = null
+  let costUsd: number | null = null
+  for (const line of lines) {
+    if (!line.startsWith('{')) continue
+    try {
+      const parsed = JSON.parse(line) as Record<string, unknown>
+      const candidates = [
+        parsed.usage,
+        (parsed.response as Record<string, unknown> | undefined)?.usage,
+        (parsed.metrics as Record<string, unknown> | undefined)?.usage,
+      ].filter(Boolean) as Record<string, unknown>[]
+      for (const candidate of candidates) {
+        const input =
+          toNumber(candidate.input_tokens) ??
+          toNumber(candidate.prompt_tokens) ??
+          toNumber(candidate.inputTokens) ??
+          null
+        const outputTokens =
+          toNumber(candidate.output_tokens) ??
+          toNumber(candidate.completion_tokens) ??
+          toNumber(candidate.outputTokens) ??
+          null
+        const totalTokens =
+          toNumber(candidate.total_tokens) ??
+          toNumber(candidate.totalTokens) ??
+          (typeof input === 'number' && typeof outputTokens === 'number'
+            ? input + outputTokens
+            : null)
+        if (input !== null || outputTokens !== null || totalTokens !== null) {
+          usage = { promptTokens: input, completionTokens: outputTokens, totalTokens }
+        }
+      }
+      if (costUsd === null) {
+        const costValue =
+          toNumber(parsed.cost_usd) ??
+          toNumber((parsed.usage as Record<string, unknown> | undefined)?.cost_usd) ??
+          null
+        if (typeof costValue === 'number') costUsd = costValue
+      }
+    } catch {
+      // ignore malformed JSON lines
+    }
+  }
+  return { usage, costUsd }
+}
+
 export async function runCliModel({
   provider,
   prompt,
@@ -110,7 +263,7 @@ export async function runCliModel({
   config,
   cwd,
   extraArgs,
-}: RunCliModelOptions): Promise<{ text: string }> {
+}: RunCliModelOptions): Promise<CliRunResult> {
   const execFileFn = execFileImpl ?? execFile
   const binary = resolveCliBinary(provider, config, env)
   const args: string[] = []
@@ -127,9 +280,13 @@ export async function runCliModel({
   if (provider === 'codex') {
     const outputDir = await fs.mkdtemp(path.join(tmpdir(), 'summarize-codex-'))
     const outputPath = path.join(outputDir, 'last-message.txt')
-    args.push('exec', '--output-last-message', outputPath, '--skip-git-repo-check')
+    args.push('exec', '--output-last-message', outputPath, '--skip-git-repo-check', '--json')
     if (model && model.trim().length > 0) {
       args.push('-m', model.trim())
+    }
+    const hasVerbosityOverride = args.some((arg) => arg.includes('text.verbosity'))
+    if (!hasVerbosityOverride) {
+      args.push('-c', 'text.verbosity="medium"')
     }
     const { stdout } = await execCliWithInput({
       execFileImpl: execFileFn,
@@ -140,15 +297,28 @@ export async function runCliModel({
       env,
       cwd,
     })
-    if (stdout.trim()) {
-      return { text: stdout.trim() }
+    const { usage, costUsd } = parseCodexUsageFromJsonl(stdout)
+    let fileText = ''
+    try {
+      fileText = (await fs.readFile(outputPath, 'utf8')).trim()
+    } catch {
+      fileText = ''
     }
-    const fileText = (await fs.readFile(outputPath, 'utf8')).trim()
-    return { text: fileText }
+    if (fileText) {
+      return { text: fileText, usage, costUsd }
+    }
+    const stdoutText = stdout.trim()
+    if (stdoutText) {
+      return { text: stdoutText, usage, costUsd }
+    }
+    throw new Error('CLI returned empty output')
   }
 
   if (model && model.trim().length > 0) {
     args.push('--model', model.trim())
+  }
+  if (provider === 'claude') {
+    args.push('--print')
   }
   args.push('--output-format', 'json')
   if (allowTools) {
@@ -173,14 +343,15 @@ export async function runCliModel({
   if (!trimmed) {
     throw new Error('CLI returned empty output')
   }
-  try {
-    const parsed = JSON.parse(trimmed) as { result?: string; response?: string }
-    const resultText = parsed.result ?? parsed.response
+  const parsed = parseJsonFromOutput(trimmed)
+  if (parsed && typeof parsed === 'object') {
+    const payload = parsed as Record<string, unknown>
+    const resultText = payload.result ?? payload.response
     if (typeof resultText === 'string' && resultText.trim().length > 0) {
-      return { text: resultText }
+      const usage = provider === 'claude' ? parseClaudeUsage(payload) : parseGeminiUsage(payload)
+      const costUsd = provider === 'claude' ? (toNumber(payload.total_cost_usd) ?? null) : null
+      return { text: resultText.trim(), usage, costUsd }
     }
-  } catch {
-    // fall through to plain text
   }
-  return { text: trimmed }
+  return { text: trimmed, usage: null, costUsd: null }
 }

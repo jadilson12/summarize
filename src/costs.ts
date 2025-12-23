@@ -1,11 +1,12 @@
 import type { LlmTokenUsage } from './llm/generate-text.js'
 
-export type LlmProvider = 'xai' | 'openai' | 'google' | 'anthropic'
+export type LlmProvider = 'xai' | 'openai' | 'google' | 'anthropic' | 'cli'
 
 export type LlmCall = {
   provider: LlmProvider
   model: string
   usage: LlmTokenUsage | null
+  costUsd?: number | null
   purpose: 'summary' | 'markdown'
 }
 
