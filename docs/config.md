@@ -102,6 +102,7 @@ For auto selection with rules:
 Notes:
 
 - Parsed leniently (JSON5), but **comments are not allowed**.
+- Unknown keys are ignored.
 - `model.rules` is optional. If omitted, built-in defaults apply.
 - `model.rules[].when` (optional) must be an array (e.g. `["video","youtube"]`).
 - `model.rules[]` must use either `candidates` or `bands`.

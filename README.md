@@ -187,6 +187,7 @@ Also supported:
 - `media.videoMode: "auto"|"transcript"|"understand"`
 
 Note: the config is parsed leniently (JSON5), but **comments are not allowed**.
+Unknown keys are ignored.
 
 Precedence:
 
