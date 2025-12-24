@@ -1366,7 +1366,7 @@ function buildCompactTranscriptPart(extracted: Parameters<typeof buildDetailedLe
 
   const wordLabel = `${formatCompactCount(transcriptWords)} words`
 
-  return `${duration}⏲ ${wordLabel}`
+  return `⏲${duration}, ${wordLabel}`
 }
 
 export async function runCli(

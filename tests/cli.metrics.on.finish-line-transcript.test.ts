@@ -60,6 +60,7 @@ describe('--metrics on', () => {
     })
 
     expect(stderrText).toMatch(/⏲/)
+    expect(stderrText).toMatch(/⏲~?\d/)
     expect(stderrText).toMatch(/\b\d.*words\b/)
     expect(stderrText).not.toContain('calls=')
     expect(stderrText).not.toContain('input=')
