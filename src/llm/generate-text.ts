@@ -500,7 +500,9 @@ export async function streamTextWithModelId({
         textStream: wrapTextStream(result.textStream),
         canonicalModelId: parsed.canonical,
         provider: parsed.provider,
-        usage: result.totalUsage.then((raw) => normalizeTokenUsage(raw)).catch(() => null),
+        usage: Promise.resolve(result.totalUsage)
+          .then((raw) => normalizeTokenUsage(raw))
+          .catch(() => null),
         lastError: () => lastError,
       }
     }
@@ -526,7 +528,9 @@ export async function streamTextWithModelId({
         textStream: wrapTextStream(result.textStream),
         canonicalModelId: parsed.canonical,
         provider: parsed.provider,
-        usage: result.totalUsage.then((raw) => normalizeTokenUsage(raw)).catch(() => null),
+        usage: Promise.resolve(result.totalUsage)
+          .then((raw) => normalizeTokenUsage(raw))
+          .catch(() => null),
         lastError: () => lastError,
       }
     }
@@ -549,7 +553,9 @@ export async function streamTextWithModelId({
         textStream: wrapTextStream(result.textStream),
         canonicalModelId: parsed.canonical,
         provider: parsed.provider,
-        usage: result.totalUsage.then((raw) => normalizeTokenUsage(raw)).catch(() => null),
+        usage: Promise.resolve(result.totalUsage)
+          .then((raw) => normalizeTokenUsage(raw))
+          .catch(() => null),
         lastError: () => lastError,
       }
     }
@@ -585,7 +591,9 @@ export async function streamTextWithModelId({
       textStream: wrapTextStream(result.textStream),
       canonicalModelId: parsed.canonical,
       provider: parsed.provider,
-      usage: result.totalUsage.then((raw) => normalizeTokenUsage(raw)).catch(() => null),
+      usage: Promise.resolve(result.totalUsage)
+        .then((raw) => normalizeTokenUsage(raw))
+        .catch(() => null),
       lastError: () => lastError,
     }
   } catch (error) {
