@@ -164,5 +164,42 @@ describe('tty website progress', () => {
 
     vi.useRealTimers()
   })
-})
 
+  it('renders whisper provider hints and optional duration/parts', () => {
+    const setText = vi.fn()
+    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } })
+    expect(progress).not.toBeNull()
+    if (!progress) return
+
+    progress.onProgress({
+      kind: 'transcript-whisper-start',
+      url: 'https://podcasts.example/episode',
+      service: 'podcast',
+      providerHint: 'fal',
+      totalDurationSeconds: null,
+      parts: null,
+    })
+    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('Whisper/FAL'))
+
+    progress.onProgress({
+      kind: 'transcript-whisper-start',
+      url: 'https://podcasts.example/episode',
+      service: 'podcast',
+      providerHint: 'openai->fal',
+      totalDurationSeconds: 44,
+      parts: null,
+    })
+    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('Whisper/OpenAI→FAL'))
+    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('44s'))
+
+    progress.onProgress({
+      kind: 'transcript-whisper-start',
+      url: 'https://podcasts.example/episode',
+      service: 'podcast',
+      providerHint: 'unknown',
+      totalDurationSeconds: null,
+      parts: 3,
+    })
+    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('Transcribing (podcast, Whisper'))
+  })
+})

@@ -52,7 +52,8 @@ export function createTranscriptProgressRenderer({
   }
 
   const startTicker = (render: () => string) => {
-    if (ticker) return
+    // Callers always `stopTicker()` before `startTicker()`. Keep this simple (and avoid
+    // accidentally hiding duplicate tickers during refactors).
     ticker = setInterval(() => updateSpinner(render()), 1000)
   }
 
