@@ -14,6 +14,7 @@
 - `--extract` renders Markdown in TTY output (same renderer as summaries) when `--render auto|md` (use `--render plain` for raw Markdown).
 - Suppress transcript progress/failure messages for non-YouTube / non-podcast URLs.
 - Streaming now works with auto-selected models (including `--model free`) when `--stream on|auto`.
+- Warn when `--length` is explicitly provided with `--extract` (ignored; no summary is generated).
 
 ## 0.6.0 - 2025-12-25
 
