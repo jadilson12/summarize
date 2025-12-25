@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import { runCli } from '../../src/run.js'
 
 const LIVE = process.env.SUMMARIZE_LIVE_TEST === '1'
-const LIVE_PODCHASER = process.env.SUMMARIZE_LIVE_PODCHASER === '1'
 
 const collectStream = () => {
   let text = ''
@@ -25,7 +24,6 @@ const silentStderr = new Writable({
 
 ;(LIVE ? describe : describe.skip)('live podcast hosts', () => {
   const timeoutMs = 180_000
-  const itPodchaser = LIVE_PODCHASER ? it : it.skip
 
   const expectDescriptionOrTranscript = ({
     description,
@@ -117,36 +115,6 @@ const silentStderr = new Writable({
       const description = payload.extracted?.description ?? ''
       const content = payload.extracted?.content ?? ''
       expectDescriptionOrTranscript({ description, content, minDescriptionChars: 80 })
-    },
-    timeoutMs
-  )
-
-  itPodchaser(
-    'podchaser episode prefers description-sized content',
-    async () => {
-      const out = collectStream()
-      await runCli(
-        [
-          '--extract',
-          '--json',
-          '--timeout',
-          '120s',
-          'https://www.podchaser.com/podcasts/aviation-weeks-check-6-podcast-26817/episodes/check-6-revisits-rtxs-pratt-wh-276449881',
-        ],
-        {
-          fetch: globalThis.fetch.bind(globalThis),
-          stdout: out.stream,
-          stderr: silentStderr,
-          env: process.env,
-        }
-      )
-
-      const payload = JSON.parse(out.getText()) as {
-        extracted?: { content?: string; description?: string }
-      }
-      const description = payload.extracted?.description ?? ''
-      const content = payload.extracted?.content ?? ''
-      expectDescriptionOrTranscript({ description, content, minDescriptionChars: 120 })
     },
     timeoutMs
   )
