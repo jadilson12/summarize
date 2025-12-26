@@ -375,17 +375,18 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       let liveOverflowed = false
       const terminalRows = terminalHeight(deps.stdout, deps.env)
       const maxLiveRows = Math.max(3, terminalRows - 1)
-      const tailLiveRows = Math.max(1, Math.min(maxLiveRows - 1, Math.max(6, terminalRows - 2)))
+      const tailLiveRows = Math.max(1, Math.min(maxLiveRows - 1, 12))
+      const liveWidth = markdownRenderWidth(deps.stdout, deps.env)
       const liveRenderer = shouldLiveRenderSummary
         ? createLiveRenderer({
             write: (chunk) => {
               deps.clearProgressForStdout()
               deps.stdout.write(chunk)
             },
-            width: markdownRenderWidth(deps.stdout, deps.env),
+            width: liveWidth,
             renderFrame: (markdown) =>
               renderMarkdownAnsi(prepareMarkdownForTerminal(markdown), {
-                width: markdownRenderWidth(deps.stdout, deps.env),
+                width: liveWidth,
                 wrap: true,
                 color: supportsColor(deps.stdout, deps.envForRun),
                 hyperlinks: true,

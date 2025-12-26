@@ -5,6 +5,7 @@
 ### Fixed
 
 - Streaming: pad live max-rows and use tail redraw to avoid scrollback duplication while streaming Markdown.
+- Streaming: lock live render width and tighten tail rows to reduce duplicate lines while scrolling.
 
 ### Changed
 
