@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 - 2025-12-26
+
+### Fixed
+
+- Packaging: `@steipete/summarize-core` now ships a CJS build for `require()` consumers (fixes `pnpm dlx @steipete/summarize --help` and the published CLI runtime).
+
 ## 0.7.0 - 2025-12-26
 
 ### Highlights
