@@ -57,12 +57,12 @@ export type AssetSummaryContext = {
   metricsDetailed: boolean
   shouldComputeReport: boolean
   runStartedAtMs: number
-	  verbose: boolean
-	  verboseColor: boolean
-	  streamingEnabled: boolean
-	  plain: boolean
-	  summaryEngine: ReturnType<typeof createSummaryEngine>
-	  trackedFetch: typeof fetch
+  verbose: boolean
+  verboseColor: boolean
+  streamingEnabled: boolean
+  plain: boolean
+  summaryEngine: ReturnType<typeof createSummaryEngine>
+  trackedFetch: typeof fetch
   writeViaFooter: (parts: string[]) => void
   clearProgressForStdout: () => void
   getLiteLlmCatalog: () => Promise<

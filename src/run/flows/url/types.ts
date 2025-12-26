@@ -41,13 +41,13 @@ export type UrlFlowContext = {
   metricsDetailed: boolean
   shouldComputeReport: boolean
   runStartedAtMs: number
-	  verbose: boolean
-	  verboseColor: boolean
-	  progressEnabled: boolean
-	  streamingEnabled: boolean
-	  plain: boolean
-	  openaiUseChatCompletions: boolean
-	  configPath: string | null
+  verbose: boolean
+  verboseColor: boolean
+  progressEnabled: boolean
+  streamingEnabled: boolean
+  plain: boolean
+  openaiUseChatCompletions: boolean
+  configPath: string | null
   configModelLabel: string | null
   openaiWhisperUsdPerMinute: number
   setTranscriptionCost: (costUsd: number | null, label: string | null) => void

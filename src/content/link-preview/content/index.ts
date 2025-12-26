@@ -297,7 +297,9 @@ export async function fetchLinkContent(
           continue
         }
         if (isAnubisHtml(nitterHtml)) {
-          nitterError = new Error(`Nitter returned Anubis challenge from ${new URL(nitterUrl).host}`)
+          nitterError = new Error(
+            `Nitter returned Anubis challenge from ${new URL(nitterUrl).host}`
+          )
           deps.onProgress?.({ kind: 'nitter-done', url: nitterUrl, ok: false, textBytes: null })
           continue
         }
@@ -413,11 +415,12 @@ export async function fetchLinkContent(
       : birdError
         ? `Bird failed: ${birdError instanceof Error ? birdError.message : String(birdError)}`
         : 'Bird returned no text'
-    const nitterNote = nitterUrls.length > 0
-      ? nitterError
-        ? `Nitter failed: ${nitterError instanceof Error ? nitterError.message : String(nitterError)}`
-        : 'Nitter returned no text'
-      : 'Nitter not available'
+    const nitterNote =
+      nitterUrls.length > 0
+        ? nitterError
+          ? `Nitter failed: ${nitterError instanceof Error ? nitterError.message : String(nitterError)}`
+          : 'Nitter returned no text'
+        : 'Nitter not available'
     throw new Error(`Unable to fetch tweet content from X. ${birdNote}. ${nitterNote}.`)
   }
   return htmlResult

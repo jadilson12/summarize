@@ -19,4 +19,3 @@ describe('readability (jsdom css parse noise)', () => {
     consoleError.mockRestore()
   })
 })
-

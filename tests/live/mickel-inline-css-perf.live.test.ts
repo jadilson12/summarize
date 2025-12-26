@@ -28,7 +28,17 @@ const LIVE = process.env.SUMMARIZE_LIVE_TEST === '1'
     const start = performance.now()
 
     await runCli(
-      ['--json', '--extract-only', '--format', 'text', '--firecrawl', 'off', '--timeout', '60s', url],
+      [
+        '--json',
+        '--extract-only',
+        '--format',
+        'text',
+        '--firecrawl',
+        'off',
+        '--timeout',
+        '60s',
+        url,
+      ],
       {
         env: { ...process.env },
         fetch: globalThis.fetch.bind(globalThis),
@@ -45,4 +55,3 @@ const LIVE = process.env.SUMMARIZE_LIVE_TEST === '1'
     expect(durationMs).toBeLessThan(20_000)
   }, 90_000)
 })
-

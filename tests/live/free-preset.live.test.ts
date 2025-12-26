@@ -116,15 +116,7 @@ const silentStderr = new Writable({
         ;(out.stream as unknown as { columns?: number }).columns = 80
 
         await runCli(
-	          [
-	            '--timeout',
-	            '60s',
-	            '--model',
-	            'free',
-	            '--stream',
-	            'on',
-	            'https://example.com',
-	          ],
+          ['--timeout', '60s', '--model', 'free', '--stream', 'on', 'https://example.com'],
           {
             env,
             fetch: globalThis.fetch.bind(globalThis),
@@ -134,7 +126,7 @@ const silentStderr = new Writable({
         )
 
         const text = out.getText()
-        expect(text).toMatch(/\u001b\\[[0-9;]*m/)
+        expect(text).toMatch(/\\x1b\\[[0-9;]*m/)
         expect(text).not.toContain('\u001b[?2026h')
         expect(text).not.toContain('\u001b[?2026l')
       } catch (error) {

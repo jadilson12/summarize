@@ -70,12 +70,11 @@ describe('cli markdown hyperlinks', () => {
     const stderr = collectStream()
 
     await runCli(['--model', 'openai/gpt-5.2', '--stream', 'off', 'https://example.com'], {
-        env: { HOME: root, OPENAI_API_KEY: 'test', TERM: 'xterm-256color' },
-        fetch: fetchMock as unknown as typeof fetch,
-        stdout: stdout.stream,
-        stderr: stderr.stream,
-      }
-    )
+      env: { HOME: root, OPENAI_API_KEY: 'test', TERM: 'xterm-256color' },
+      fetch: fetchMock as unknown as typeof fetch,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })
 
     const out = stdout.getText()
     expect(out).toContain('\u001b]8;;https://www.heise.de/\u0007')

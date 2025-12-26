@@ -58,12 +58,12 @@ describe('model presets: OpenRouter "no allowed providers" beats timeout', () =>
     const stdout = collectStream()
     const stderr = collectStream()
 
-	    await expect(
-	      runCli(['--model', 'free', '--timeout', '10s', '--plain', filePath], {
-	        env: { HOME: root, OPENROUTER_API_KEY: 'test' },
-	        fetch: async () => new Response('{}', { status: 404 }),
-	        stdout: stdout.stream,
-	        stderr: stderr.stream,
+    await expect(
+      runCli(['--model', 'free', '--timeout', '10s', '--plain', filePath], {
+        env: { HOME: root, OPENROUTER_API_KEY: 'test' },
+        fetch: async () => new Response('{}', { status: 404 }),
+        stdout: stdout.stream,
+        stderr: stderr.stream,
       })
     ).rejects.toThrow(/OpenRouter could not route any models/i)
 

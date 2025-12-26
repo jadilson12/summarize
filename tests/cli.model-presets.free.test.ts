@@ -55,12 +55,12 @@ describe('model presets: free', () => {
     const stdout = collectStream()
     const stderr = collectStream()
 
-	    await expect(
-	      runCli(['--model', 'free', '--max-output-tokens', '500', '--plain', filePath], {
-	        env: { HOME: root, OPENROUTER_API_KEY: 'test' },
-	        fetch: async () => {
-	          throw new Error('unexpected fetch')
-	        },
+    await expect(
+      runCli(['--model', 'free', '--max-output-tokens', '500', '--plain', filePath], {
+        env: { HOME: root, OPENROUTER_API_KEY: 'test' },
+        fetch: async () => {
+          throw new Error('unexpected fetch')
+        },
         stdout: stdout.stream,
         stderr: stderr.stream,
       })
@@ -89,11 +89,11 @@ describe('model presets: free', () => {
     const stdout = collectStream()
     const stderr = collectStream()
 
-	    await runCli(['--model', 'free', '--max-output-tokens', '500', '--plain', filePath], {
-	      env: { HOME: root, OPENAI_API_KEY: 'test' },
-	      fetch: async () => {
-	        throw new Error('unexpected fetch')
-	      },
+    await runCli(['--model', 'free', '--max-output-tokens', '500', '--plain', filePath], {
+      env: { HOME: root, OPENAI_API_KEY: 'test' },
+      fetch: async () => {
+        throw new Error('unexpected fetch')
+      },
       stdout: stdout.stream,
       stderr: stderr.stream,
     })

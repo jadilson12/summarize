@@ -91,16 +91,7 @@ describe('cli streaming with auto model selection', () => {
     const stderr = collectStream()
 
     await runCli(
-      [
-        '--model',
-        'free',
-        '--timeout',
-        '2s',
-        '--stream',
-        'on',
-        '--plain',
-        'https://example.com',
-      ],
+      ['--model', 'free', '--timeout', '2s', '--stream', 'on', '--plain', 'https://example.com'],
       {
         env: { HOME: root, OPENAI_API_KEY: 'test' },
         fetch: fetchMock as unknown as typeof fetch,

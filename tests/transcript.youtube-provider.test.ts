@@ -126,7 +126,12 @@ describe('YouTube transcript provider module', () => {
       }
     )
 
-    expect(result.attemptedProviders).toEqual(['youtubei', 'captionTracks', 'yt-dlp', 'unavailable'])
+    expect(result.attemptedProviders).toEqual([
+      'youtubei',
+      'captionTracks',
+      'yt-dlp',
+      'unavailable',
+    ])
   })
 
   it('skips yt-dlp in auto mode when credentials are missing', async () => {

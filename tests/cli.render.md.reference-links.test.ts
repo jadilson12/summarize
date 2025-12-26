@@ -96,15 +96,7 @@ describe('cli markdown reference links', () => {
     const stderr = collectStream()
 
     await runCli(
-      [
-        '--model',
-        'openai/gpt-5.2',
-        '--timeout',
-        '2s',
-        '--stream',
-        'auto',
-        'https://example.com',
-      ],
+      ['--model', 'openai/gpt-5.2', '--timeout', '2s', '--stream', 'auto', 'https://example.com'],
       {
         env: { HOME: root, OPENAI_API_KEY: 'test' },
         fetch: fetchMock as unknown as typeof fetch,
@@ -170,15 +162,7 @@ describe('cli markdown reference links', () => {
     const stderr = collectStream()
 
     await runCli(
-      [
-        '--model',
-        'openai/gpt-5.2',
-        '--timeout',
-        '2s',
-        '--stream',
-        'auto',
-        'https://example.com',
-      ],
+      ['--model', 'openai/gpt-5.2', '--timeout', '2s', '--stream', 'auto', 'https://example.com'],
       {
         env: { HOME: root, OPENAI_API_KEY: 'test' },
         fetch: fetchMock as unknown as typeof fetch,
@@ -247,15 +231,7 @@ describe('cli markdown reference links', () => {
     const stderr = collectStream()
 
     await runCli(
-      [
-        '--model',
-        'openai/gpt-5.2',
-        '--timeout',
-        '2s',
-        '--stream',
-        'auto',
-        'https://example.com',
-      ],
+      ['--model', 'openai/gpt-5.2', '--timeout', '2s', '--stream', 'auto', 'https://example.com'],
       {
         env: { HOME: root, OPENAI_API_KEY: 'test' },
         fetch: fetchMock as unknown as typeof fetch,

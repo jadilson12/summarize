@@ -20,4 +20,3 @@ describe('readability (large inline CSS)', () => {
     expect(durationMs).toBeLessThan(5000)
   }, 15_000)
 })
-

@@ -367,13 +367,13 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       }
     }
 
-	    if (streamResult) {
-	      getLastStreamError = streamResult.lastError
-	      let streamed = ''
-	      let plainFlushedLen = 0
-	      let streamedRaw = ''
-	      const liveWidth = markdownRenderWidth(deps.stdout, deps.env)
-        let wroteLeadingBlankLine = false
+    if (streamResult) {
+      getLastStreamError = streamResult.lastError
+      let streamed = ''
+      let plainFlushedLen = 0
+      let streamedRaw = ''
+      const liveWidth = markdownRenderWidth(deps.stdout, deps.env)
+      let wroteLeadingBlankLine = false
 
       const streamer = shouldStreamRenderedMarkdownToStdout
         ? createMarkdownStreamer({
@@ -388,27 +388,27 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
           })
         : null
 
-	      try {
-	        let cleared = false
-	        for await (const delta of streamResult.textStream) {
-	          const merged = mergeStreamingChunk(streamed, delta)
-	          streamed = merged.next
-	          if (shouldStreamSummaryToStdout) {
-              if (plainFlushedLen === 0) {
-                const match = streamed.match(/^\n+/)
-                if (match) plainFlushedLen = match[0].length
+      try {
+        let cleared = false
+        for await (const delta of streamResult.textStream) {
+          const merged = mergeStreamingChunk(streamed, delta)
+          streamed = merged.next
+          if (shouldStreamSummaryToStdout) {
+            if (plainFlushedLen === 0) {
+              const match = streamed.match(/^\n+/)
+              if (match) plainFlushedLen = match[0].length
+            }
+            const lastNl = streamed.lastIndexOf('\n')
+            if (lastNl >= 0 && lastNl + 1 > plainFlushedLen) {
+              if (!cleared) {
+                deps.clearProgressForStdout()
+                cleared = true
               }
-	            const lastNl = streamed.lastIndexOf('\n')
-	            if (lastNl >= 0 && lastNl + 1 > plainFlushedLen) {
-	              if (!cleared) {
-	                deps.clearProgressForStdout()
-	                cleared = true
-	              }
-	              deps.stdout.write(streamed.slice(plainFlushedLen, lastNl + 1))
-	              plainFlushedLen = lastNl + 1
-	            }
-	            continue
-	          }
+              deps.stdout.write(streamed.slice(plainFlushedLen, lastNl + 1))
+              plainFlushedLen = lastNl + 1
+            }
+            continue
+          }
 
           if (shouldStreamRenderedMarkdownToStdout && streamer) {
             const out = streamer.push(merged.appended)
@@ -422,23 +422,23 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
               }
             }
           }
-	        }
+        }
 
-	        streamedRaw = streamed
-	        const trimmed = streamed.trim()
-	        streamed = trimmed
-	      } finally {
-	        if (shouldStreamRenderedMarkdownToStdout) {
-            const out = streamer?.finish()
-            if (out) {
-              deps.clearProgressForStdout()
-              if (!wroteLeadingBlankLine) {
-                deps.stdout.write(`\n${out.replace(/^\n+/, '')}`)
-                wroteLeadingBlankLine = true
-              } else {
-                deps.stdout.write(out)
-              }
+        streamedRaw = streamed
+        const trimmed = streamed.trim()
+        streamed = trimmed
+      } finally {
+        if (shouldStreamRenderedMarkdownToStdout) {
+          const out = streamer?.finish()
+          if (out) {
+            deps.clearProgressForStdout()
+            if (!wroteLeadingBlankLine) {
+              deps.stdout.write(`\n${out.replace(/^\n+/, '')}`)
+              wroteLeadingBlankLine = true
+            } else {
+              deps.stdout.write(out)
             }
+          }
           summaryAlreadyPrinted = true
         }
       }
@@ -448,20 +448,19 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         model: streamResult.canonicalModelId,
         usage,
         purpose: 'summary',
-	      })
-	      summary = streamed
-	      if (shouldStreamSummaryToStdout) {
-	        const finalText = streamedRaw || streamed
-	        const remaining =
-	          plainFlushedLen < finalText.length ? finalText.slice(plainFlushedLen) : ''
-	        if (remaining) deps.stdout.write(remaining)
-	        const endedWithNewline = remaining
-	          ? remaining.endsWith('\n')
-	          : plainFlushedLen > 0 && finalText[plainFlushedLen - 1] === '\n'
-	        if (!endedWithNewline) deps.stdout.write('\n')
-	        summaryAlreadyPrinted = true
-	      }
-	    }
+      })
+      summary = streamed
+      if (shouldStreamSummaryToStdout) {
+        const finalText = streamedRaw || streamed
+        const remaining = plainFlushedLen < finalText.length ? finalText.slice(plainFlushedLen) : ''
+        if (remaining) deps.stdout.write(remaining)
+        const endedWithNewline = remaining
+          ? remaining.endsWith('\n')
+          : plainFlushedLen > 0 && finalText[plainFlushedLen - 1] === '\n'
+        if (!endedWithNewline) deps.stdout.write('\n')
+        summaryAlreadyPrinted = true
+      }
+    }
 
     summary = summary.trim()
     if (summary.length === 0) {

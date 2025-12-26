@@ -208,18 +208,16 @@ export function writeFinishLine({
     // Examples:
     // - "2.9k words" => null
     // - "2.9k words via firecrawl" => "via firecrawl"
-    const match = input.match(
-      /^~?\d[\d.]*[kmb]?\s+words(?:\s+via\s+(.+))?$/i
-    )
+    const match = input.match(/^~?\d[\d.]*[kmb]?\s+words(?:\s+via\s+(.+))?$/i)
     if (!match) return input
     const via = match[1]?.trim()
     return via ? `via ${via}` : null
   }
 
   const effectiveLabel =
-    compactTranscriptLabel && compactTranscriptLabel.toLowerCase().includes('words') && label
+    compactTranscriptLabel?.toLowerCase().includes('words') && label
       ? stripWordPrefix(label)
-      : label ?? null
+      : (label ?? null)
   const filteredExtraParts =
     compactTranscriptLabel && extraParts
       ? extraParts.filter((part) => part !== compactTranscript)

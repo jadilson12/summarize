@@ -26,11 +26,11 @@ describe('--model auto no-model footer', () => {
     const stdout = collectStream()
     const stderr = collectStream()
 
-	    await runCli(['--model', 'auto', '--plain', filePath], {
-	      env: { HOME: root },
-	      fetch: async () => {
-	        throw new Error('unexpected fetch')
-	      },
+    await runCli(['--model', 'auto', '--plain', filePath], {
+      env: { HOME: root },
+      fetch: async () => {
+        throw new Error('unexpected fetch')
+      },
       stdout: stdout.stream,
       stderr: stderr.stream,
     })

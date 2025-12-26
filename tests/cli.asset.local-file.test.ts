@@ -88,16 +88,7 @@ describe('cli asset inputs (local file)', () => {
     const stderr = collectStream()
 
     await runCli(
-      [
-        '--model',
-        'openai/gpt-5.2',
-        '--timeout',
-        '2s',
-        '--stream',
-        'on',
-        '--plain',
-        pdfPath,
-      ],
+      ['--model', 'openai/gpt-5.2', '--timeout', '2s', '--stream', 'on', '--plain', pdfPath],
       {
         env: { HOME: root, OPENAI_API_KEY: 'test' },
         fetch: vi.fn(async () => {
@@ -154,16 +145,7 @@ describe('cli asset inputs (local file)', () => {
     const stderr = collectStream()
 
     await runCli(
-      [
-        '--model',
-        'openai/gpt-5.2',
-        '--timeout',
-        '2s',
-        '--stream',
-        'on',
-        '--plain',
-        txtPath,
-      ],
+      ['--model', 'openai/gpt-5.2', '--timeout', '2s', '--stream', 'on', '--plain', txtPath],
       {
         env: { HOME: root, OPENAI_API_KEY: 'test' },
         fetch: vi.fn(async () => {
@@ -285,18 +267,9 @@ describe('cli asset inputs (local file)', () => {
     const stderr = collectStream()
 
     await expect(
-	      runCli(
-	        [
-	          '--model',
-	          'openai/gpt-5.2',
-	          '--timeout',
-	          '2s',
-	          '--stream',
-	          'on',
-	          '--plain',
-	          txtPath,
-	        ],
-	        {
+      runCli(
+        ['--model', 'openai/gpt-5.2', '--timeout', '2s', '--stream', 'on', '--plain', txtPath],
+        {
           env: { HOME: root, OPENAI_API_KEY: 'test' },
           fetch: vi.fn(async () => {
             throw new Error('unexpected fetch')
@@ -339,18 +312,9 @@ describe('cli asset inputs (local file)', () => {
     writeFileSync(txtPath, Buffer.alloc(10 * 1024 * 1024 + 1, 'a'))
 
     const run = () =>
-	      runCli(
-	        [
-	          '--model',
-	          'openai/gpt-5.2',
-	          '--timeout',
-	          '2s',
-	          '--stream',
-	          'on',
-	          '--plain',
-	          txtPath,
-	        ],
-	        {
+      runCli(
+        ['--model', 'openai/gpt-5.2', '--timeout', '2s', '--stream', 'on', '--plain', txtPath],
+        {
           env: { HOME: root, OPENAI_API_KEY: 'test' },
           fetch: vi.fn(async () => {
             throw new Error('unexpected fetch')

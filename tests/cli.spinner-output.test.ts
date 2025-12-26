@@ -133,14 +133,17 @@ describe('cli spinner output', () => {
     const stderr = collectStream({ isTTY: true })
 
     await expect(
-      runCli(['--stream', 'off', '--model', 'xai/grok-4-fast-non-reasoning', '--timeout', '2s', pdfPath], {
-        env: { HOME: root, XAI_API_KEY: 'test', TERM: 'xterm-256color' },
-        fetch: vi.fn(async () => {
-          throw new Error('unexpected fetch')
-        }) as unknown as typeof fetch,
-        stdout: stdout.stream,
-        stderr: stderr.stream,
-      })
+      runCli(
+        ['--stream', 'off', '--model', 'xai/grok-4-fast-non-reasoning', '--timeout', '2s', pdfPath],
+        {
+          env: { HOME: root, XAI_API_KEY: 'test', TERM: 'xterm-256color' },
+          fetch: vi.fn(async () => {
+            throw new Error('unexpected fetch')
+          }) as unknown as typeof fetch,
+          stdout: stdout.stream,
+          stderr: stderr.stream,
+        }
+      )
     ).rejects.toThrow(/does not support attaching files/i)
 
     const rawErr = stderr.getText()

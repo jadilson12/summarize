@@ -92,12 +92,12 @@ describe('tweet summary behavior', () => {
     const stdout = createBufferStream()
     const stderr = createBufferStream()
 
-	    await runCli(
-	      [baseExtracted.url, '--model', 'openai/gpt-4o-mini', '--stream', 'off', '--plain'],
-	      {
-	        env: { ...process.env, OPENAI_API_KEY: 'test-key' },
-	        fetch: async () => {
-	          throw new Error('unexpected fetch')
+    await runCli(
+      [baseExtracted.url, '--model', 'openai/gpt-4o-mini', '--stream', 'off', '--plain'],
+      {
+        env: { ...process.env, OPENAI_API_KEY: 'test-key' },
+        fetch: async () => {
+          throw new Error('unexpected fetch')
         },
         stdout: stdout.stream,
         stderr: stderr.stream,
