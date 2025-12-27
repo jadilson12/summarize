@@ -34,6 +34,9 @@
 - Transcripts: show yt-dlp download progress bytes instead of staying at 0 B.
 - Transcripts: stabilize yt-dlp download totals to prevent bouncing progress bars.
 - Streaming: stop/clear progress UI before first streamed output to avoid sticky “Summarizing …” lines in scrollback.
+- Daemon: unify URL/page summarization with the CLI flows (single code path; keeps extract/cache/model logic in sync).
+- URL flow: propagate `extracted.truncated` into the prompt context so summaries can reflect partial inputs.
+- Streaming: avoid printing a leading blank line when stdout is not a TTY (keeps cached vs streamed output consistent).
 
 ## 0.7.1 - 2025-12-26
 
