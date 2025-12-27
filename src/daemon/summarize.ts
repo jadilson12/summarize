@@ -4,6 +4,7 @@ import { countTokens } from 'gpt-tokenizer'
 import { buildLinkSummaryPrompt } from '../prompts/index.js'
 import { buildFinishLineText, buildLengthPartsForFinishLine } from '../run/finish-line.js'
 
+import { countWords, formatInputSummary } from './meta.js'
 import { formatProgress } from './summarize-progress.js'
 import { createDaemonRunContext, runPrompt } from './summarize-run.js'
 
@@ -24,6 +25,7 @@ export type StreamSink = {
   writeChunk: (text: string) => void
   onModelChosen: (modelId: string) => void
   writeStatus?: ((text: string) => void) | null
+  writeMeta?: ((data: { inputSummary: string | null }) => void) | null
 }
 
 export type VisiblePageMetrics = {
@@ -71,6 +73,14 @@ export async function streamSummaryForVisiblePage({
     languageRaw,
     sink,
   })
+
+  const inputSummary = formatInputSummary({
+    kindLabel: null,
+    durationSeconds: null,
+    words: countWords(input.text),
+    characters: input.text.length,
+  })
+  sink.writeMeta?.({ inputSummary })
 
   const lengthInstruction =
     promptOverride && typeof ctx.summaryLength !== 'string'
@@ -205,9 +215,49 @@ export async function streamSummaryForUrl({
     markdownMode: 'readability',
   })
 
+  const isYouTube = extracted.siteName === 'YouTube' || /youtube\.com|youtu\.be/i.test(extracted.url)
+  const transcriptChars =
+    typeof extracted.transcriptCharacters === 'number' && extracted.transcriptCharacters > 0
+      ? extracted.transcriptCharacters
+      : null
+  const hasTranscript = transcriptChars != null
+
+  const transcriptWords =
+    hasTranscript && transcriptChars != null
+      ? extracted.transcriptWordCount ?? Math.max(0, Math.round(transcriptChars / 6))
+      : null
+
+  const exactDurationSeconds =
+    typeof extracted.mediaDurationSeconds === 'number' && extracted.mediaDurationSeconds > 0
+      ? extracted.mediaDurationSeconds
+      : null
+  const estimatedDurationSeconds =
+    transcriptWords != null && transcriptWords > 0
+      ? Math.max(60, Math.max(1, Math.round(transcriptWords / 160)) * 60)
+      : null
+
+  const durationSeconds = hasTranscript ? exactDurationSeconds ?? estimatedDurationSeconds : null
+  const isDurationApproximate = hasTranscript && durationSeconds != null && exactDurationSeconds == null
+
+  const kindLabel = (() => {
+    if (isYouTube) return 'YouTube'
+    if (!hasTranscript) return null
+    if (extracted.isVideoOnly || extracted.video) return 'video'
+    return 'podcast'
+  })()
+
+  const inputSummary = formatInputSummary({
+    kindLabel,
+    durationSeconds,
+    words: hasTranscript ? transcriptWords : extracted.wordCount,
+    characters: hasTranscript ? transcriptChars : extracted.totalCharacters,
+    isDurationApproximate,
+  })
+  sink.writeMeta?.({ inputSummary })
+
   writeStatus?.('Summarizing…')
 
-  const hasTranscript =
+  const hasTranscriptSource =
     extracted.siteName === 'YouTube' ||
     (extracted.transcriptSource !== null && extracted.transcriptSource !== 'unavailable')
 
@@ -231,7 +281,7 @@ export async function streamSummaryForUrl({
     description: extracted.description,
     content: extracted.content,
     truncated: extracted.truncated,
-    hasTranscript,
+    hasTranscript: hasTranscriptSource,
     summaryLength: ctx.summaryLength,
     outputLanguage: ctx.outputLanguage,
     shares: [],

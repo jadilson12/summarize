@@ -5,9 +5,13 @@ import { type DaemonRequestedMode, resolveAutoDaemonMode } from './auto-mode.js'
 import type { DaemonConfig } from './config.js'
 import { DAEMON_HOST, DAEMON_PORT_DEFAULT } from './constants.js'
 import { streamSummaryForUrl, streamSummaryForVisiblePage } from './summarize.js'
+import { formatModelLabelForDisplay } from '../run/finish-line.js'
 
 type SessionEvent =
-  | { event: 'meta'; data: { model: string } }
+  | {
+      event: 'meta'
+      data: { model: string | null; modelLabel: string | null; inputSummary: string | null }
+    }
   | { event: 'status'; data: { text: string } }
   | { event: 'chunk'; data: { text: string } }
   | {
@@ -29,7 +33,7 @@ type Session = {
   buffer: string[]
   done: boolean
   clients: Set<http.ServerResponse>
-  lastModel: string | null
+  lastMeta: { model: string | null; modelLabel: string | null; inputSummary: string | null }
 }
 
 function json(
@@ -115,7 +119,7 @@ function createSession(): Session {
     buffer: [],
     done: false,
     clients: new Set(),
-    lastModel: null,
+    lastMeta: { model: null, modelLabel: null, inputSummary: null },
   }
 }
 
@@ -131,6 +135,22 @@ function pushToSession(session: Session, evt: SessionEvent) {
   if (evt.event === 'done' || evt.event === 'error') {
     session.done = true
   }
+}
+
+function emitMeta(
+  session: Session,
+  patch: Partial<{ model: string | null; modelLabel: string | null; inputSummary: string | null }>
+) {
+  const next = { ...session.lastMeta, ...patch }
+  if (
+    next.model === session.lastMeta.model &&
+    next.modelLabel === session.lastMeta.modelLabel &&
+    next.inputSummary === session.lastMeta.inputSummary
+  ) {
+    return
+  }
+  session.lastMeta = next
+  pushToSession(session, { event: 'meta', data: next })
 }
 
 function endSession(session: Session) {
@@ -238,15 +258,17 @@ export async function runDaemonServer({
                 pushToSession(session, { event: 'chunk', data: { text: chunk } })
               },
               onModelChosen: (modelId: string) => {
-                if (session.lastModel === modelId) return
+                if (session.lastMeta.model === modelId) return
                 emittedOutput = true
-                session.lastModel = modelId
-                pushToSession(session, { event: 'meta', data: { model: modelId } })
+                emitMeta(session, { model: modelId, modelLabel: formatModelLabelForDisplay(modelId) })
               },
               writeStatus: (text: string) => {
                 const clean = text.trim()
                 if (!clean) return
                 pushToSession(session, { event: 'status', data: { text: clean } })
+              },
+              writeMeta: (data: { inputSummary: string | null }) => {
+                emitMeta(session, { inputSummary: data.inputSummary ?? null })
               },
             }
 
@@ -301,9 +323,11 @@ export async function runDaemonServer({
               }
             })()
 
-            if (!session.lastModel) {
-              session.lastModel = result.usedModel
-              pushToSession(session, { event: 'meta', data: { model: result.usedModel } })
+            if (!session.lastMeta.model) {
+              emitMeta(session, {
+                model: result.usedModel,
+                modelLabel: formatModelLabelForDisplay(result.usedModel),
+              })
             }
 
             pushToSession(session, { event: 'metrics', data: result.metrics })
