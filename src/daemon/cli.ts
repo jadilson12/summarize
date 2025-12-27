@@ -4,6 +4,7 @@ import path from 'node:path'
 import { buildDaemonHelp } from '../run/help.js'
 import { readDaemonConfig, writeDaemonConfig } from './config.js'
 import { DAEMON_HOST, DAEMON_PORT_DEFAULT } from './constants.js'
+import { mergeDaemonEnv } from './env-merge.js'
 import { buildEnvSnapshotFromEnv } from './env-snapshot.js'
 import {
   installLaunchAgent,
@@ -239,7 +240,7 @@ export async function handleDaemonRequest({
       stderr.write('Run: summarize daemon install --token <token>\n')
       throw new Error('Daemon not configured')
     }
-    const mergedEnv = { ...cfg.env, ...envForRun }
+    const mergedEnv = mergeDaemonEnv({ envForRun, snapshot: cfg.env })
     await runDaemonServer({ env: mergedEnv, fetchImpl, config: cfg })
     return true
   }
