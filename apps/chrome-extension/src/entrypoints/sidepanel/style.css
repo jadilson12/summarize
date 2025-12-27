@@ -274,16 +274,19 @@ main {
 
 @keyframes progressBounce {
   0% {
-    transform: translateX(-60%);
+    transform: translateX(-100%);
   }
-  55% {
-    transform: translateX(70%);
+  12% {
+    transform: translateX(-85%);
   }
-  72% {
-    transform: translateX(62%);
+  45% {
+    transform: translateX(150%);
+  }
+  75% {
+    transform: translateX(165%);
   }
   100% {
-    transform: translateX(75%);
+    transform: translateX(150%);
   }
 }
 
