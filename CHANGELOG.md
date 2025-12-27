@@ -6,6 +6,14 @@
 
 - ESM-only: `@steipete/summarize` + `@steipete/summarize-core` no longer support CommonJS `require()`; the CLI binary is now ESM.
 
+### Features
+
+- Chrome: add a real **Side Panel** extension (MV3) that summarizes the **current tab** and renders streamed Markdown.
+- Daemon: add `summarize daemon …` (LaunchAgent-backed localhost server on `127.0.0.1:8787`) for extension ↔ CLI integration.
+  - Token pairing (shared secret)
+  - Streaming over SSE
+  - Commands: `install`, `status`, `restart`, `uninstall`, `run`
+
 ## 0.7.1 - 2025-12-26
 
 ### Fixed

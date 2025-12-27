@@ -51,6 +51,44 @@ Apple Silicon only (arm64).
 summarize "https://example.com"
 ```
 
+## Chrome Side Panel
+
+Want a one-click “always-on” summarizer in Chrome (real Side Panel, not injected UI)?
+
+This is a **Chrome extension** + a tiny local **daemon** (LaunchAgent) that streams Markdown summaries for the **currently visible tab** into the Side Panel.
+
+Quickstart (local daemon on `127.0.0.1:8787`):
+
+1) Build + load the extension (unpacked):
+   - `pnpm -C apps/chrome-extension build`
+   - Chrome → `chrome://extensions` → Developer mode → “Load unpacked”
+   - Pick: `apps/chrome-extension/.output/chrome-mv3`
+2) Open the Side Panel → it shows a token + install command.
+3) Run the install command in Terminal:
+   - Installed binary: `summarize daemon install --token <TOKEN>`
+   - Repo/dev checkout: `pnpm summarize daemon install --token <TOKEN> --dev`
+4) Verify / debug:
+   - `summarize daemon status`
+   - `summarize daemon restart`
+
+Notes:
+
+- Summarization only runs when the Side Panel is open.
+- “Auto” mode summarizes on navigation (incl. SPAs); otherwise use the button.
+- The daemon is localhost-only and requires a shared token.
+
+- Docs: `docs/chrome-extension.md`
+- Extension package/dev notes: `apps/chrome-extension/README.md`
+
+Troubleshooting:
+
+- **“Receiving end does not exist”**: Chrome didn’t inject the content script yet.
+  - Extension details → “Site access” → set to “On all sites” (or allow this domain)
+  - Reload the tab once.
+- **“Failed to fetch” / daemon unreachable**:
+  - Run `summarize daemon status`
+  - Check logs: `~/.summarize/logs/daemon.err.log`
+
 Input can be a URL or a local file path:
 
 ```bash
