@@ -87,7 +87,14 @@ function buildCompactTranscriptPart(extracted: ExtractedForLengths): string | nu
 
   const mediaKind = inferMediaKindLabelForFinishLine(extracted)
 
-  return mediaKind ? `${duration} ${mediaKind} · ${wordLabel}` : `${duration} · ${wordLabel}`
+  const kindLabel = (() => {
+    if (isYouTube) return 'YouTube'
+    if (mediaKind === 'audio') return 'podcast'
+    if (mediaKind === 'video') return 'video'
+    return null
+  })()
+
+  return kindLabel ? `${duration} ${kindLabel} · ${wordLabel}` : `${duration} · ${wordLabel}`
 }
 
 function buildDetailedLengthPartsForExtracted(extracted: ExtractedForLengths): string[] {
@@ -264,6 +271,11 @@ export function buildFinishLineText({
   const effectiveLabel = (() => {
     if (!label) return null
     if (!compactTranscriptLabel?.toLowerCase().includes('words')) return label
+
+    const txLower = compactTranscriptLabel.toLowerCase()
+    if (txLower.includes('podcast')) return null
+    if (txLower.includes('youtube') && /youtube|youtu\.be/i.test(label)) return null
+
     const stripped = stripWordPrefix(label)
     if (stripped === null) return null
     if (stripped !== label) return stripped

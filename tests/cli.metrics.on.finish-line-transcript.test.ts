@@ -59,7 +59,7 @@ describe('--metrics on', () => {
       stderr,
     })
 
-    expect(stderrText).toMatch(/\b44s video · \d+ words\b/)
+    expect(stderrText).toMatch(/\b44s YouTube · \d+ words\b/)
     expect(stderrText).toMatch(/\bwords\b/)
     expect(stderrText).not.toContain('calls=')
     expect(stderrText).not.toContain('input=')
