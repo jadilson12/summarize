@@ -30,6 +30,11 @@ function trackErrors(page: Page, pageErrors: Error[], consoleErrors: string[]) {
   })
 }
 
+function assertNoErrors(harness: ExtensionHarness) {
+  expect(harness.pageErrors.map((error) => error.message)).toEqual([])
+  expect(filterAllowed(harness.consoleErrors)).toEqual([])
+}
+
 async function launchExtension(): Promise<ExtensionHarness> {
   if (!fs.existsSync(extensionPath)) {
     throw new Error('Missing built extension. Run: pnpm -C apps/chrome-extension build')
@@ -81,8 +86,7 @@ test('sidepanel loads without runtime errors', async () => {
   try {
     await openExtensionPage(harness, 'sidepanel.html', '#title')
     await new Promise((resolve) => setTimeout(resolve, 500))
-    expect(harness.pageErrors.map((error) => error.message)).toEqual([])
-    expect(filterAllowed(harness.consoleErrors)).toEqual([])
+    assertNoErrors(harness)
   } finally {
     await closeExtension(harness.context, harness.userDataDir)
   }
@@ -108,8 +112,35 @@ test('sidepanel scheme picker supports keyboard selection', async () => {
     await page.keyboard.press('Enter')
 
     await expect(schemeTrigger.locator('.scheme-label')).toHaveText('Cedar')
-    expect(harness.pageErrors.map((error) => error.message)).toEqual([])
-    expect(filterAllowed(harness.consoleErrors)).toEqual([])
+    assertNoErrors(harness)
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir)
+  }
+})
+
+test('sidepanel mode picker updates theme mode', async () => {
+  const harness = await launchExtension()
+
+  try {
+    const page = await openExtensionPage(harness, 'sidepanel.html', '#title')
+    await page.click('#drawerToggle')
+    await expect(page.locator('#drawer')).toBeVisible()
+
+    const modeLabel = page.locator('label.mode')
+    const modeTrigger = modeLabel.locator('.pickerTrigger')
+    const modeList = modeLabel.locator('.pickerList')
+
+    await modeTrigger.focus()
+    await modeTrigger.press('Enter')
+    await expect(modeList).toBeVisible()
+    await modeList.focus()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+
+    await expect(modeTrigger).toHaveText('Dark')
+    await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark')
+    assertNoErrors(harness)
   } finally {
     await closeExtension(harness.context, harness.userDataDir)
   }
@@ -147,8 +178,32 @@ test('options pickers support keyboard selection', async () => {
     await page.keyboard.press('Enter')
 
     await expect(modeTrigger).toHaveText('Light')
-    expect(harness.pageErrors.map((error) => error.message)).toEqual([])
-    expect(filterAllowed(harness.consoleErrors)).toEqual([])
+    assertNoErrors(harness)
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir)
+  }
+})
+
+test('options scheme list renders chips', async () => {
+  const harness = await launchExtension()
+
+  try {
+    const page = await openExtensionPage(harness, 'options.html', '#pickersRoot')
+
+    const schemeLabel = page.locator('label.scheme')
+    const schemeTrigger = schemeLabel.locator('.pickerTrigger')
+    const schemeList = schemeLabel.locator('.pickerList')
+
+    await schemeTrigger.focus()
+    await schemeTrigger.press('Enter')
+    await expect(schemeList).toBeVisible()
+
+    const options = schemeList.locator('.pickerOption')
+    await expect(options).toHaveCount(6)
+    await expect(options.first().locator('.scheme-chips span')).toHaveCount(4)
+    await expect(options.nth(1).locator('.scheme-chips span')).toHaveCount(4)
+
+    assertNoErrors(harness)
   } finally {
     await closeExtension(harness.context, harness.userDataDir)
   }

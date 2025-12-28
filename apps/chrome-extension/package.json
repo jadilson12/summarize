@@ -7,7 +7,7 @@
     "dev": "wxt dev",
     "build": "wxt build",
     "lint": "wxt lint",
-    "test:e2e": "pnpm build && playwright test -c playwright.config.ts"
+    "test:e2e": "env -u NO_COLOR pnpm build && env -u NO_COLOR playwright test -c playwright.config.ts"
   },
   "dependencies": {
     "@mozilla/readability": "0.6.0",
@@ -20,6 +20,6 @@
     "@playwright/test": "1.57.0",
     "@types/chrome": "^0.1.32",
     "typescript": "^5.9.3",
-    "wxt": "0.20.0-beta2"
+    "wxt": "0.20.13"
   }
 }
