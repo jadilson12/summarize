@@ -921,7 +921,7 @@ header.isRunning .progressFill {
 header.isRunning.isIndeterminate .progressFill {
   left: 0;
   width: 36%;
-  animation: progressPingPong 2.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: progressPingPong 2.8s ease-in-out infinite;
 }
 
 header.isError .progressFill {
@@ -939,24 +939,24 @@ main {
     left: 0%;
     width: 36%;
   }
-  44% {
+  40% {
     left: 64%;
     width: 36%;
   }
   50% {
-    left: 70%;
+    left: 68%;
     width: 30%;
   }
-  56% {
-    left: 66%;
+  60% {
+    left: 64%;
     width: 34%;
   }
-  92% {
+  90% {
     left: 0%;
     width: 36%;
   }
   96% {
-    left: 0%;
+    left: -3%;
     width: 30%;
   }
   100% {

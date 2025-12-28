@@ -106,7 +106,7 @@ function setStatus(text: string) {
   statusText = text
   if (streaming) {
     const split = splitStatusPercent(text)
-    if (split.percent && summaryFromCache !== true) {
+    if (split.percent && summaryFromCache === false) {
       showProgress = true
       if (progressTimer) {
         clearTimeout(progressTimer)
@@ -156,7 +156,7 @@ function updateHeader() {
 }
 
 function armProgress() {
-  if (summaryFromCache === true) return
+  if (summaryFromCache !== false) return
   showProgress = false
   if (progressTimer) clearTimeout(progressTimer)
   progressTimer = window.setTimeout(() => {
@@ -718,7 +718,6 @@ async function startStream(run: RunStart) {
   const controller = new AbortController()
   streamController = controller
   streaming = true
-  armProgress()
   streamedAnyNonWhitespace = false
   rememberedUrl = false
   currentSource = { url: run.url, title: run.title }
