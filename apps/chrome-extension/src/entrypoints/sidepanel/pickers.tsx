@@ -286,8 +286,10 @@ function SidepanelPickers(props: SidepanelPickerProps) {
         labelClassName="font"
         api={fontApi}
         items={fontItems}
-        triggerContent={(label) => <span>{label || 'SF'}</span>}
-        optionContent={(item) => <span>{item.label}</span>}
+        triggerContent={(label, value) => (
+          <span style={value ? { fontFamily: value } : undefined}>{label || 'SF'}</span>
+        )}
+        optionContent={(item) => <span style={{ fontFamily: item.value }}>{item.label}</span>}
       />
     </>
   )
