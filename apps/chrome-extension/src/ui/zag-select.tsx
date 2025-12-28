@@ -29,18 +29,16 @@ export function useZagSelect({ id, items, value, onValueChange }: UseZagSelectAr
 
   const syncing = useRef(false)
 
-  const [state, send] = useMachine(
-    select.machine({
-      id,
-      collection,
-      positioning: { placement: 'bottom-start', gutter: 6, sameWidth: true },
-      defaultValue: value ? [value] : [],
-      onValueChange: ({ value: next }: select.ValueChangeDetails) => {
-        if (syncing.current) return
-        onValueChange(next[0] ?? '')
-      },
-    })
-  )
+  const [state, send] = useMachine(select.machine, {
+    id,
+    collection,
+    positioning: { placement: 'bottom-start', gutter: 6, sameWidth: true },
+    defaultValue: value ? [value] : [],
+    onValueChange: ({ value: next }: select.ValueChangeDetails) => {
+      if (syncing.current) return
+      onValueChange(next[0] ?? '')
+    },
+  })
 
   const api = select.connect(state, send, normalizeProps)
   const apiRef = useRef(api)
