@@ -3,20 +3,20 @@ import { describe, expect, it } from 'vitest'
 import { buildIdleSubtitle } from '../apps/chrome-extension/src/lib/header.js'
 
 describe('chrome/header', () => {
-  it('joins input summary and model label', () => {
+  it('keeps only the input summary', () => {
     expect(buildIdleSubtitle({ inputSummary: '1.2k words · 12k chars', modelLabel: 'free' })).toBe(
-      '1.2k words · 12k chars · free'
+      '1.2k words · 12k chars'
     )
   })
 
-  it('falls back to raw model', () => {
+  it('ignores model fallback', () => {
     expect(buildIdleSubtitle({ inputSummary: '12k chars', model: 'openrouter/x' })).toBe(
-      '12k chars · openrouter/x'
+      '12k chars'
     )
   })
 
-  it('trims and skips empty parts', () => {
-    expect(buildIdleSubtitle({ inputSummary: '  ', modelLabel: '  free  ' })).toBe('free')
+  it('trims and skips empty summary', () => {
+    expect(buildIdleSubtitle({ inputSummary: '  ', modelLabel: '  free  ' })).toBe('')
     expect(buildIdleSubtitle({ inputSummary: null, modelLabel: null, model: null })).toBe('')
   })
 })
