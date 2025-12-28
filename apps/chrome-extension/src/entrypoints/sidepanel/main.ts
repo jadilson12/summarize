@@ -207,6 +207,30 @@ function queueRender() {
   }, 80)
 }
 
+const isHttpUrl = (value: string) => /^https?:\/\//i.test(value)
+const isLikelyDomain = (value: string) =>
+  /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(value) && !value.includes('..')
+
+function renderMetricsSummary(summary: string) {
+  metricsEl.replaceChildren()
+  const parts = summary.split(' · ')
+  parts.forEach((part, index) => {
+    if (index) metricsEl.append(document.createTextNode(' · '))
+    const trimmed = part.trim()
+    if (!trimmed) return
+    if (isHttpUrl(trimmed) || isLikelyDomain(trimmed)) {
+      const link = document.createElement('a')
+      link.href = isHttpUrl(trimmed) ? trimmed : `https://${trimmed}`
+      link.textContent = trimmed
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      metricsEl.append(link)
+      return
+    }
+    metricsEl.append(document.createTextNode(part))
+  })
+}
+
 function mergeStreamText(current: string, incoming: string): string {
   if (!incoming) return current
   if (!current) return incoming
@@ -779,15 +803,9 @@ async function startStream(run: RunStart) {
           detailsDetailed: string | null
           elapsedMs: number
         }
-        metricsEl.textContent = data.summary
-        const tooltipParts = [data.summaryDetailed, data.detailsDetailed, data.details]
-          .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-          .slice(0, 2)
-        const tooltip = tooltipParts.join('\n')
-        if (tooltip) {
-          metricsEl.setAttribute('title', tooltip)
-          metricsEl.setAttribute('data-details', '1')
-        }
+        renderMetricsSummary(data.summary)
+        metricsEl.removeAttribute('title')
+        metricsEl.removeAttribute('data-details')
         metricsEl.classList.remove('hidden')
       } else if (msg.event === 'error') {
         const data = JSON.parse(msg.data) as { message: string }

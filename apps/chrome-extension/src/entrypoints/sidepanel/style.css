@@ -1022,8 +1022,13 @@ main {
   user-select: text;
 }
 
-.metrics[data-details] {
-  cursor: help;
+.metrics a {
+  color: var(--ui-link);
+  text-decoration: none;
+}
+
+.metrics a:hover {
+  text-decoration: underline;
 }
 
 .render h1,
