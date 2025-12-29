@@ -1,6 +1,7 @@
 # Summarize Guardrails
 
 - Hard rule: single source of truth = `~/Projects/summarize`; never commit in `vendor/summarize` (treat it as a read-only checkout).
+- Note: multiple agents often work in this folder. If you see files/changes you do not recognize, ignore them and list them at the end.
 
 ## Workspace layout (note)
 
