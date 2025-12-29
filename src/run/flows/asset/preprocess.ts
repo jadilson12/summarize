@@ -39,6 +39,70 @@ export type AssetPreprocessResult = {
   textContent: { content: string; bytes: number } | null
 }
 
+export type DocumentHandlingDecision =
+  | { mode: 'inline' }
+  | { mode: 'attach' }
+  | { mode: 'preprocess' }
+  | { mode: 'error'; error: Error }
+
+export function resolveDocumentHandling({
+  attachment,
+  textContent,
+  fileBytes,
+  preprocessMode,
+  fixedModelSpec,
+}: {
+  attachment: AssetAttachment
+  textContent: { content: string; bytes: number } | null
+  fileBytes: Uint8Array | null
+  preprocessMode: 'off' | 'auto' | 'always'
+  fixedModelSpec: FixedModelSpec | null
+}): DocumentHandlingDecision {
+  if (attachment.kind !== 'file') return { mode: 'inline' }
+  if (textContent) return { mode: 'inline' }
+  if (!fileBytes) {
+    return {
+      mode: 'error',
+      error: new Error('Internal error: missing file bytes for binary attachment'),
+    }
+  }
+
+  const canAttachDocument =
+    preprocessMode !== 'always' &&
+    fixedModelSpec?.transport === 'native' &&
+    supportsNativeFileAttachment({
+      provider: fixedModelSpec.provider,
+      attachment: { kind: attachment.kind, mediaType: attachment.mediaType },
+    })
+
+  if (canAttachDocument && fileBytes.byteLength <= MAX_DOCUMENT_BYTES_DEFAULT) {
+    return { mode: 'attach' }
+  }
+
+  if (canAttachDocument && fileBytes.byteLength > MAX_DOCUMENT_BYTES_DEFAULT) {
+    if (preprocessMode === 'off') {
+      return {
+        mode: 'error',
+        error: new Error(
+          `PDF is too large to attach (${formatBytes(fileBytes.byteLength)}). Max is ${formatBytes(MAX_DOCUMENT_BYTES_DEFAULT)}. Enable preprocessing or use a smaller file.`
+        ),
+      }
+    }
+    return { mode: 'preprocess' }
+  }
+
+  if (preprocessMode === 'off') {
+    return {
+      mode: 'error',
+      error: new Error(
+        `This build does not support attaching binary files (${attachment.mediaType}). Enable preprocessing (e.g. --preprocess auto) and install uvx/markitdown.`
+      ),
+    }
+  }
+
+  return { mode: 'preprocess' }
+}
+
 export async function prepareAssetPrompt({
   ctx,
   attachment,
@@ -114,58 +178,50 @@ export async function prepareAssetPrompt({
   let preprocessedMarkdown: string | null = null
   let usingPreprocessedMarkdown = false
 
-  const canUseNativeFileAttachment =
-    attachment.kind === 'file' &&
-    !textContent &&
-    ctx.preprocessMode !== 'always' &&
-    ctx.fixedModelSpec?.transport === 'native' &&
-    supportsNativeFileAttachment({
-      provider: ctx.fixedModelSpec.provider,
-      attachment: { kind: attachment.kind, mediaType: attachment.mediaType },
-    })
+  const documentHandling =
+    attachment.kind === 'file'
+      ? resolveDocumentHandling({
+          attachment,
+          textContent,
+          fileBytes,
+          preprocessMode: ctx.preprocessMode,
+          fixedModelSpec: ctx.fixedModelSpec,
+        })
+      : { mode: 'inline' as const }
 
-  if (canUseNativeFileAttachment) {
+  if (documentHandling.mode === 'error') {
+    throw documentHandling.error
+  }
+
+  if (documentHandling.mode === 'attach') {
     if (!fileBytes) {
       throw new Error('Internal error: missing file bytes for document attachment')
     }
-    if (fileBytes.byteLength > MAX_DOCUMENT_BYTES_DEFAULT) {
-      if (ctx.preprocessMode === 'off') {
-        throw new Error(
-          `PDF is too large to attach (${formatBytes(fileBytes.byteLength)}). Max is ${formatBytes(MAX_DOCUMENT_BYTES_DEFAULT)}. Enable preprocessing or use a smaller file.`
-        )
-      }
-    } else {
-      promptText = buildFileSummaryPrompt({
-        filename: attachment.filename,
+    promptText = buildFileSummaryPrompt({
+      filename: attachment.filename,
+      mediaType: attachment.mediaType,
+      summaryLength: summaryLengthTarget,
+      contentLength: textContent?.content.length ?? null,
+      outputLanguage: ctx.outputLanguage,
+      promptOverride: ctx.promptOverride ?? null,
+      lengthInstruction: ctx.lengthInstruction ?? null,
+      languageInstruction: ctx.languageInstruction ?? null,
+    })
+    attachments = [
+      {
+        kind: 'document',
         mediaType: attachment.mediaType,
-        summaryLength: summaryLengthTarget,
-        contentLength: textContent?.content.length ?? null,
-        outputLanguage: ctx.outputLanguage,
-        promptOverride: ctx.promptOverride ?? null,
-        lengthInstruction: ctx.lengthInstruction ?? null,
-        languageInstruction: ctx.languageInstruction ?? null,
-      })
-      attachments = [
-        {
-          kind: 'document',
-          mediaType: attachment.mediaType,
-          bytes: fileBytes,
-          filename: attachment.filename,
-        },
-      ]
-      return { promptText, attachments, assetFooterParts, textContent }
-    }
+        bytes: fileBytes,
+        filename: attachment.filename,
+      },
+    ]
+    return { promptText, attachments, assetFooterParts, textContent }
   }
 
   // Non-text file attachments require preprocessing (pi-ai message format supports images, but not generic files).
-  if (attachment.kind === 'file' && !textContent) {
+  if (attachment.kind === 'file' && !textContent && documentHandling.mode === 'preprocess') {
     if (!fileBytes) {
       throw new Error('Internal error: missing file bytes for markitdown preprocessing')
-    }
-    if (ctx.preprocessMode === 'off') {
-      throw new Error(
-        `This build does not support attaching binary files (${attachment.mediaType}). Enable preprocessing (e.g. --preprocess auto) and install uvx/markitdown.`
-      )
     }
     if (!shouldMarkitdownConvertMediaType(attachment.mediaType)) {
       throw new Error(
