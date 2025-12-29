@@ -5,6 +5,7 @@
 ### Improvements
 
 - Streaming: flush deltas without newline gating for faster panel updates.
+- Chrome Side Panel: streamline setup panel with install toggle and inline copy buttons.
 - Chrome Side Panel: dynamically shorten `openrouter/` to `or/` in the metrics footer when it wraps.
 - Chrome extension: add optional hover tooltip summaries for links (advanced setting, default off).
 - Chrome extension: split advanced overrides into a two-column grid for quicker scanning.

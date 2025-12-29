@@ -1091,7 +1091,7 @@ main {
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   background: var(--surface);
   border-radius: 14px;
-  padding: 12px;
+  padding: 18px;
   margin-bottom: 12px;
 }
 
@@ -1121,20 +1121,83 @@ main {
   margin-top: 6px;
 }
 
+.setup__section {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.setup__headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.setup__title {
+  color: var(--text);
+}
+
+.setup__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--field-bg);
+}
+
+button.setup__pill {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+button.setup__pill.isActive {
+  background: var(--btn-bg);
+  color: var(--text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.setup__codeRow {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.setup__codeRow code {
+  flex: 1;
+  min-width: 0;
+}
+
+.setup__copy {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.setup__copy svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
 .setup__hint {
   margin: 6px 0 0;
   font-size: 11px;
   color: var(--muted);
 }
 
-.setup .row {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.setup .row button {
-  flex: 1;
+.setup__actions {
+  margin-top: 8px;
 }
 
 .hidden {
