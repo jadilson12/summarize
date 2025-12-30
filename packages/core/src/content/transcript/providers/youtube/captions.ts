@@ -108,26 +108,42 @@ function coerceDurationSeconds(value: unknown): number | null {
   return asNumber
 }
 
+function extractDurationSecondsFromHtml(html: string): number | null {
+  const candidates = [
+    /"lengthSeconds":"(\d+)"/,
+    /"lengthSeconds":(\d+)/,
+    /"durationSeconds":"(\d+)"/,
+    /"durationSeconds":(\d+)/,
+  ]
+  for (const pattern of candidates) {
+    const match = html.match(pattern)
+    if (!match?.[1]) continue
+    const value = Number(match[1])
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  return null
+}
+
 export function extractYoutubeDurationSeconds(html: string): number | null {
   const playerResponse = extractInitialPlayerResponse(html)
-  if (!playerResponse) return null
-
-  const videoDetails = playerResponse.videoDetails
-  if (isObjectLike(videoDetails)) {
-    const duration = coerceDurationSeconds(videoDetails.lengthSeconds)
-    if (duration) return duration
-  }
-
-  const microformat = playerResponse.microformat
-  if (isObjectLike(microformat)) {
-    const renderer = microformat.playerMicroformatRenderer
-    if (isObjectLike(renderer)) {
-      const duration = coerceDurationSeconds(renderer.lengthSeconds)
+  if (playerResponse) {
+    const videoDetails = playerResponse.videoDetails
+    if (isObjectLike(videoDetails)) {
+      const duration = coerceDurationSeconds(videoDetails.lengthSeconds)
       if (duration) return duration
+    }
+
+    const microformat = playerResponse.microformat
+    if (isObjectLike(microformat)) {
+      const renderer = microformat.playerMicroformatRenderer
+      if (isObjectLike(renderer)) {
+        const duration = coerceDurationSeconds(renderer.lengthSeconds)
+        if (duration) return duration
+      }
     }
   }
 
-  return null
+  return extractDurationSecondsFromHtml(html)
 }
 
 function extractInnertubeApiKey(html: string): string | null {

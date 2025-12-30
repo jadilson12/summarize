@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { fetchTranscriptFromCaptionTracks } from '../packages/core/src/content/transcript/providers/youtube/captions.js'
+import {
+  extractYoutubeDurationSeconds,
+  fetchTranscriptFromCaptionTracks,
+} from '../packages/core/src/content/transcript/providers/youtube/captions.js'
 
 const jsonResponse = (payload: unknown, status = 200) => Response.json(payload, { status })
 
@@ -80,5 +83,14 @@ describe('YouTube captionTracks edge cases', () => {
     )
 
     expect(transcript).toBe('From xml url')
+  })
+
+  it('extracts duration seconds from raw HTML when JSON parsing fails', () => {
+    const html =
+      '<!doctype html><html><head><title>Sample</title>' +
+      '<script>var ytInitialPlayerResponse = {"videoDetails":{"lengthSeconds":"1980",}};</script>' +
+      '</head><body></body></html>'
+
+    expect(extractYoutubeDurationSeconds(html)).toBe(1980)
   })
 })
