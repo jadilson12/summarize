@@ -1,32 +1,33 @@
 # Changelog
 
-## 0.8.1 - Unreleased
+## 0.9.0 - Unreleased
+
+### Highlights
+
+- Chrome Side Panel: **Chat mode** with metrics bar (advanced toggle, default on). Thanks @dougvk.
+- Chrome Side Panel chat: send full transcript + summary context (skip summary for oversized transcripts), include extraction metadata (duration + transcription method), jump-to-latest, and improved auto-scroll + loading states.
+- Chrome extension: optional hover tooltip summaries for links (advanced setting, default off; marked experimental).
 
 ### Improvements
 
-- Streaming: flush deltas without newline gating for faster panel updates.
-- Chrome Side Panel: streamline setup panel with install toggle and inline copy buttons.
-- Chrome Side Panel: dynamically shorten `openrouter/` to `or/` in the metrics footer when it wraps.
-- Chrome extension: move daemon status + core toggles to top of settings and clarify daemon status indicator.
-- Chrome extension: add optional hover tooltip summaries for links (advanced setting, default off).
-- Chrome extension: split advanced overrides into a two-column grid for quicker scanning.
-- Chrome Side Panel: add Chat mode with metrics bar (advanced toggle, default on). Thanks @dougvk.
-- Chrome Side Panel chat: send full transcript + summary context (skip summary for oversized transcripts), include extraction metadata (duration + transcription method), add jump-to-latest, and improve auto-scroll + loading affordances.
-- Chrome extension: move hover summary toggle to advanced settings only and mark it experimental (default off).
-- Daemon CLI: retry health/auth checks on restart/install to avoid false negatives during startup.
-- Daemon logging: optional JSON log file with rotation; extension toggle can send full input/output for debugging.
 - PDF inputs: send PDFs directly to Anthropic/OpenAI/Gemini when supported (skip markitdown preprocessing).
 - Daemon: add `/v1/chat` and `extractOnly` support to reuse URL extraction for chat.
+- Daemon logging: optional JSON log file with rotation; extension toggle can send full input/output for debugging.
+- Chrome Side Panel: add refresh summary control and bypass cache for explicit refreshes.
+- Hover summaries: prompt customization and tighter prompts for cleaner tooltips.
+- Daemon: expose version in health, plus a status pill in the Side Panel header.
+- Daemon CLI: retry health/auth checks on restart/install to avoid false negatives during startup.
+- Chrome Side Panel: streamline setup panel with install toggle and inline copy buttons.
+- Chrome extension: reorganize settings (daemon status pill + core toggles at top), and split advanced overrides into a two‑column grid.
+- Chrome Side Panel: dynamically shorten `openrouter/` to `or/` in the metrics footer when it wraps; streaming flushes without newline gating for faster panel updates.
+- Chrome extension UI: tune layout, pickers, progress bars, header status, and advanced overrides for tighter, more stable controls.
 
 ### Fixes
 
-- Auto model selection: OpenRouter fallback now resolves provider-specific ids (including dash/dot slug normalization) and skips fallback when no unique match.
+- Auto model selection: OpenRouter fallback now resolves provider-specific ids (dash/dot slug normalization) and skips fallback when no unique match.
 - Language auto: default to English when detection is uncertain.
-- Chrome extension: hide hover tooltips when the returned text looks like an error page.
-- Chrome extension: avoid hover tooltip mismatches on recycled anchors; add hover debug logging when extended logging is enabled.
-- Chrome extension: only show hover tooltips after the first streamed chunk (no “Summarizing…” popover).
-- Chrome extension: avoid Chrome “Local network access” prompts triggered by hover summaries by proxying localhost daemon calls through the background service worker.
-- Chrome extension: suppress native title tooltips while hover summaries are visible.
+- Hover summaries: hide tooltips on error pages, show only after the first streamed chunk, avoid recycled-anchor mismatches, add hover debug logging when extended logging is enabled, and suppress native title tooltips while hover summaries are visible.
+- Chrome extension: avoid Chrome “Local network access” prompts for hover summaries by proxying localhost daemon calls through the background service worker.
 - URL extraction: preserve final redirected URL so shorteners (t.co) summarize the real destination.
 
 ## 0.8.0 - 2025-12-28
