@@ -57,11 +57,8 @@ Want a one-click “always-on” summarizer in Chrome (real Side Panel, not inje
 
 This is a **Chrome extension** + a tiny local **daemon** (autostart service) that streams Markdown summaries for the **currently visible tab** into the Side Panel.
 
-Docs + setup: `https://summarize.sh`
-
-Extension docs:
+- Step-by-step install (Chrome + daemon): `apps/chrome-extension/README.md`
 - Architecture + troubleshooting: `docs/chrome-extension.md`
-- Extension-specific README (build/load/unpacked): `apps/chrome-extension/README.md`
 
 Quickstart (local daemon):
 
@@ -87,9 +84,6 @@ Notes:
 - The daemon is localhost-only and requires a shared token.
 - Daemon autostart: macOS (launchd), Linux (systemd user), Windows (Scheduled Task).
 - Tip: configure `free` via `summarize refresh-free` (requires `OPENROUTER_API_KEY`). Add `--set-default` to also set model=`free`, then set Model to `free` in extension settings.
-
-- Docs: `docs/chrome-extension.md`
-- Extension package/dev notes: `apps/chrome-extension/README.md`
 
 Troubleshooting:
 

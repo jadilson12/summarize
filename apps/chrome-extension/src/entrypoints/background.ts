@@ -510,8 +510,7 @@ export default defineBackground(() => {
       }
     }
 
-    const extractedMatchesTab =
-      tab.url && extracted.url ? urlsMatch(tab.url, extracted.url) : true
+    const extractedMatchesTab = tab.url && extracted.url ? urlsMatch(tab.url, extracted.url) : true
     const resolvedExtracted =
       tab.url && !extractedMatchesTab
         ? {
@@ -538,9 +537,7 @@ export default defineBackground(() => {
     const resolvedTitle = tab.title?.trim() || resolvedExtracted.title || null
     const resolvedPayload = { ...resolvedExtracted, title: resolvedTitle }
     const wordCount =
-      resolvedPayload.text.length > 0
-        ? resolvedPayload.text.split(/\s+/).filter(Boolean).length
-        : 0
+      resolvedPayload.text.length > 0 ? resolvedPayload.text.split(/\s+/).filter(Boolean).length : 0
 
     cachedExtracts.set(tab.id, {
       url: resolvedPayload.url,

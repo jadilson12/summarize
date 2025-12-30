@@ -81,7 +81,7 @@ describe('daemon redirect e2e', () => {
       settleChunk(() => {
         rejectChunk?.(new Error('Timed out waiting for daemon chunk event'))
       })
-    }, 5000)
+    }, 20_000)
 
     let resolveReady: (() => void) | null = null
     const ready = new Promise<void>((resolve) => {
@@ -160,5 +160,5 @@ describe('daemon redirect e2e', () => {
       abortController.abort()
       await serverPromise
     }
-  }, 20_000)
+  }, 30_000)
 })

@@ -162,19 +162,33 @@ describe('daemon logging', () => {
       const extendedId = await run(true)
       const minimalId = await run(false)
 
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      const readLogEntries = () => {
+        try {
+          return readFileSync(logPath, 'utf8')
+            .trim()
+            .split(/\n+/)
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as Record<string, unknown>)
+        } catch {
+          return []
+        }
+      }
 
-      const lines = readFileSync(logPath, 'utf8')
-        .trim()
-        .split(/\n+/)
-        .map((line) => JSON.parse(line) as Record<string, unknown>)
+      const waitForDoneLog = async (requestId: string) => {
+        const deadline = Date.now() + 2_000
+        while (Date.now() < deadline) {
+          const lines = readLogEntries()
+          const entry = lines.find(
+            (line) => line.event === 'summarize.done' && line.requestId === requestId
+          )
+          if (entry) return entry
+          await new Promise((resolve) => setTimeout(resolve, 50))
+        }
+        return null
+      }
 
-      const doneExtended = lines.find(
-        (entry) => entry.event === 'summarize.done' && entry.requestId === extendedId
-      )
-      const doneMinimal = lines.find(
-        (entry) => entry.event === 'summarize.done' && entry.requestId === minimalId
-      )
+      const doneExtended = await waitForDoneLog(extendedId)
+      const doneMinimal = await waitForDoneLog(minimalId)
 
       expect(doneExtended).toBeTruthy()
       expect(doneMinimal).toBeTruthy()

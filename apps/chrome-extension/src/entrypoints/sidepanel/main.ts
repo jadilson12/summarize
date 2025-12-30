@@ -111,6 +111,8 @@ let chatHistoryLoadId = 0
 let activeTabId: number | null = null
 let activeTabUrl: string | null = null
 let lastStreamError: string | null = null
+let lastChatError: string | null = null
+let lastAction: 'summarize' | 'chat' | null = null
 
 const chatController = new ChatController({
   messagesEl: chatMessagesEl,
@@ -763,11 +765,13 @@ const chatStreamController = createStreamController({
   getToken: async () => (await loadSettings()).token,
   onReset: () => {
     clearMetricsForMode('chat')
+    lastChatError = null
   },
   onStatus: (text) => headerController.setStatus(text),
   onPhaseChange: (phase) => {
     if (phase === 'error') {
       finishStreamingMessage()
+      setPhase('error', { error: lastChatError ?? 'Chat failed.' })
     }
   },
   onMeta: () => {},
@@ -781,7 +785,8 @@ const chatStreamController = createStreamController({
     finishStreamingMessage()
   },
   onError: (err) => {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = friendlyFetchError(err, 'Chat stream failed')
+    lastChatError = message
     return message
   },
 })
@@ -1145,6 +1150,7 @@ function handleBgMessage(msg: BgToPanel) {
       }
       return
     case 'run:start':
+      lastAction = 'summarize'
       if (panelState.chatStreaming) {
         chatStreamController.abort()
       }
@@ -1156,6 +1162,7 @@ function handleBgMessage(msg: BgToPanel) {
       void streamController.start(msg.run)
       return
     case 'chat:start':
+      lastAction = 'chat'
       if (!chatEnabledValue) return
       void chatStreamController.start({
         id: msg.payload.id,
@@ -1168,6 +1175,11 @@ function handleBgMessage(msg: BgToPanel) {
 }
 
 function send(message: PanelToBg) {
+  if (message.type === 'panel:summarize') {
+    lastAction = 'summarize'
+  } else if (message.type === 'panel:chat') {
+    lastAction = 'chat'
+  }
   void chrome.runtime.sendMessage(message).catch(() => {
     // ignore (panel/background race while reloading)
   })
@@ -1271,11 +1283,50 @@ function finishStreamingMessage() {
   void persistChatHistory()
 }
 
+function retryChat() {
+  if (!chatEnabledValue || panelState.chatStreaming) return
+  const messages = chatController.getMessages()
+  const hasUser = messages.some((msg) => msg.role === 'user' && msg.content.trim().length > 0)
+  if (!hasUser) return
+
+  clearError()
+  const lastMessage = messages[messages.length - 1]
+  if (!lastMessage || lastMessage.role !== 'assistant' || lastMessage.content.trim().length > 0) {
+    chatController.addMessage({
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+    })
+  } else {
+    chatController.updateStreamingMessage('')
+  }
+
+  panelState.chatStreaming = true
+  chatSendBtn.disabled = true
+  scrollToBottom(true)
+
+  send({
+    type: 'panel:chat',
+    messages: chatController.buildRequestMessages(),
+    summary: panelState.summaryMarkdown,
+  })
+}
+
+function retryLastAction() {
+  if (lastAction === 'chat') {
+    retryChat()
+    return
+  }
+  send({ type: 'panel:summarize', refresh: true })
+}
+
 function sendChatMessage() {
   if (!chatEnabledValue) return
   const input = chatInputEl.value.trim()
   if (!input || panelState.chatStreaming) return
 
+  clearError()
   chatInputEl.value = ''
   chatInputEl.style.height = 'auto'
 
@@ -1296,6 +1347,7 @@ function sendChatMessage() {
   panelState.chatStreaming = true
   chatSendBtn.disabled = true
   scrollToBottom(true)
+  lastAction = 'chat'
 
   send({
     type: 'panel:chat',
@@ -1306,7 +1358,7 @@ function sendChatMessage() {
 
 summarizeBtn.addEventListener('click', () => send({ type: 'panel:summarize' }))
 refreshBtn.addEventListener('click', () => send({ type: 'panel:summarize', refresh: true }))
-errorRetryBtn.addEventListener('click', () => send({ type: 'panel:summarize', refresh: true }))
+errorRetryBtn.addEventListener('click', () => retryLastAction())
 drawerToggleBtn.addEventListener('click', () => toggleDrawer())
 advancedBtn.addEventListener('click', () => send({ type: 'panel:openOptions' }))
 

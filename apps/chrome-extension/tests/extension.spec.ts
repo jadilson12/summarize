@@ -119,18 +119,35 @@ async function sendPanelMessage(page: Page, message: object) {
   }, message)
 }
 
-async function injectContentScript(harness: ExtensionHarness, file: string) {
+async function injectContentScript(harness: ExtensionHarness, file: string, urlPrefix?: string) {
   const background =
     harness.context.serviceWorkers()[0] ??
     (await harness.context.waitForEvent('serviceworker', { timeout: 15_000 }))
-  await background.evaluate(async (scriptFile) => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    if (!tab?.id) return
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: [scriptFile],
-    })
-  }, file)
+  const result = await Promise.race([
+    background.evaluate(
+      async ({ scriptFile, prefix }) => {
+        const tabs = await chrome.tabs.query({})
+        const target =
+          prefix && prefix.length > 0
+            ? tabs.find((tab) => tab.url?.startsWith(prefix))
+            : (tabs.find((tab) => tab.active) ?? tabs[0])
+        if (!target?.id) return { ok: false, error: 'missing tab' }
+        await chrome.scripting.executeScript({
+          target: { tabId: target.id },
+          files: [scriptFile],
+        })
+        return { ok: true }
+      },
+      { scriptFile: file, prefix: urlPrefix ?? '' }
+    ),
+    new Promise<{ ok: false; error: string }>((resolve) =>
+      setTimeout(() => resolve({ ok: false, error: 'inject timeout' }), 5_000)
+    ),
+  ])
+
+  if (!result?.ok) {
+    throw new Error(`Failed to inject ${file}: ${result?.error ?? 'unknown error'}`)
+  }
 }
 
 async function mockDaemonSummarize(harness: ExtensionHarness) {
@@ -441,6 +458,39 @@ test('sidepanel clears summary when tab url changes', async () => {
   }
 })
 
+test('sidepanel shows an error when chat stream ends without done', async () => {
+  const harness = await launchExtension()
+
+  try {
+    await mockDaemonSummarize(harness)
+    await seedSettings(harness, { token: 'test-token', autoSummarize: false, chatEnabled: true })
+    const page = await openExtensionPage(harness, 'sidepanel.html', '#title')
+    const sseBody = ['event: status', 'data: {"text":"Summarizing..."}', ''].join('\n')
+
+    await harness.context.route(
+      /http:\/\/127\.0\.0\.1:8787\/v1\/summarize\/[^/]+\/events/,
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+          body: sseBody,
+        })
+      }
+    )
+
+    await sendBgMessage(harness, {
+      type: 'chat:start',
+      payload: { id: 'chat-1', url: 'https://example.com' },
+    })
+
+    await expect(page.locator('#error')).toBeVisible()
+    await expect(page.locator('#errorMessage')).toContainText('Stream ended unexpectedly')
+    assertNoErrors(harness)
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir)
+  }
+})
+
 test('auto summarize reruns after panel reopen', async () => {
   const harness = await launchExtension()
 
@@ -612,7 +662,10 @@ test('hover tooltip proxies daemon calls via background (no page-origin localhos
     const page = await harness.context.newPage()
     trackErrors(page, harness.pageErrors, harness.consoleErrors)
     await page.goto('https://example.com', { waitUntil: 'domcontentloaded' })
-    await injectContentScript(harness, 'content-scripts/hover.js')
+    await page.bringToFront()
+    await activateTabByUrl(harness, 'https://example.com')
+    await waitForActiveTabUrl(harness, 'https://example.com')
+    await injectContentScript(harness, 'content-scripts/hover.js', 'https://example.com')
 
     await page.evaluate(() => {
       const link = document.createElement('a')
@@ -620,15 +673,8 @@ test('hover tooltip proxies daemon calls via background (no page-origin localhos
       link.href = 'https://example.com/next'
       link.textContent = 'Next'
       document.body.append(link)
-
-      link.dispatchEvent(
-        new PointerEvent('pointerover', {
-          bubbles: true,
-          cancelable: true,
-          pointerType: 'mouse',
-        })
-      )
     })
+    await page.hover('#hover-target')
 
     await expect.poll(() => summarizeCalls).toBeGreaterThan(0)
     await expect.poll(() => eventsCalls).toBeGreaterThan(0)
@@ -667,6 +713,7 @@ test('content script extracts visible duration metadata', async () => {
 
     await activateTabByUrl(harness, 'https://example.com')
     await waitForActiveTabUrl(harness, 'https://example.com')
+    await injectContentScript(harness, 'content-scripts/extract.js', 'https://example.com')
 
     const background =
       harness.context.serviceWorkers()[0] ??
@@ -674,14 +721,6 @@ test('content script extracts visible duration metadata', async () => {
     const extractResult = await background.evaluate(async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) return { ok: false, error: 'missing tab' }
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content-scripts/extract.js'],
-        })
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) }
-      }
       return new Promise((resolve) => {
         chrome.tabs.sendMessage(tab.id, { type: 'extract', maxChars: 10_000 }, (response) => {
           resolve(response ?? { ok: false, error: 'no response' })

@@ -27,7 +27,7 @@
 
 - Auto model selection: OpenRouter fallback now resolves provider-specific ids (dash/dot slug normalization) and skips fallback when no unique match.
 - Language auto: default to English when detection is uncertain.
-- Chrome Side Panel: show a retryable error state when the daemon stream fails instead of silently hanging.
+- Chrome Side Panel: show a retryable error state when the daemon stream fails or stalls instead of silently hanging.
 - Chrome Side Panel: avoid startup crash when a run is aborted while a request is in flight.
 - Chrome Side Panel chat: when a video page was previously summarized from page text, chat now re-extracts via the daemon so duration + transcription metadata are included.
 - YouTube transcripts: propagate duration into transcript metadata so chat can answer “how long is this video?” reliably.

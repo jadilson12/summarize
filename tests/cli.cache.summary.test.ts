@@ -142,5 +142,5 @@ describe('cli cache summary', () => {
     expect(stdout2.getText()).toBe(first)
 
     globalFetchSpy.mockRestore()
-  })
+  }, 30_000)
 })

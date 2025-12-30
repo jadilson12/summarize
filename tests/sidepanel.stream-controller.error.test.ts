@@ -63,4 +63,48 @@ describe('sidepanel stream controller error handling', () => {
     expect(phases.at(-1)).toBe('error')
     expect(phases).not.toContain('idle')
   })
+
+  it('keeps error phase when the stream ends without a done event', async () => {
+    const phases: string[] = []
+    const statuses: string[] = []
+
+    const controller = createStreamController({
+      getToken: async () => 'token',
+      onStatus: (text) => statuses.push(text),
+      onPhaseChange: (phase) => phases.push(phase),
+      onMeta: () => {},
+      fetchImpl: async () =>
+        new Response(streamFromEvents([{ event: 'chunk', data: { text: 'Hello' } }]), {
+          status: 200,
+        }),
+    })
+
+    await controller.start(run)
+
+    expect(phases.at(-1)).toBe('error')
+    expect(statuses.some((status) => status.includes('Stream ended unexpectedly'))).toBe(true)
+  })
+
+  it('keeps error phase when the stream stalls without output', async () => {
+    const phases: string[] = []
+    const statuses: string[] = []
+    const stalledStream = new ReadableStream<Uint8Array>({
+      start() {},
+    })
+
+    const controller = createStreamController({
+      getToken: async () => 'token',
+      onStatus: (text) => statuses.push(text),
+      onPhaseChange: (phase) => phases.push(phase),
+      onMeta: () => {},
+      fetchImpl: async () => new Response(stalledStream, { status: 200 }),
+      idleTimeoutMs: 25,
+      idleTimeoutMessage: 'Timed out waiting for daemon output.',
+    })
+
+    await controller.start(run)
+
+    expect(phases.at(-1)).toBe('error')
+    expect(statuses.some((status) => status.includes('Timed out waiting'))).toBe(true)
+  })
 })

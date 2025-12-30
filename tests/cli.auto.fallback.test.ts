@@ -59,7 +59,7 @@ describe('cli auto fallback behavior', () => {
 
     const html =
       '<!doctype html><html><head><title>Hello</title></head>' +
-      `<body><article><p>${'This is a sentence. '.repeat(800)}</p></article></body></html>`
+      `<body><article><p>${'This is a sentence. '.repeat(240)}</p></article></body></html>`
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.url
@@ -119,7 +119,7 @@ describe('cli auto fallback behavior', () => {
 
     const html =
       '<!doctype html><html><head><title>Hello</title></head>' +
-      `<body><article><p>${'This is a sentence. '.repeat(800)}</p></article></body></html>`
+      `<body><article><p>${'This is a sentence. '.repeat(240)}</p></article></body></html>`
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.url

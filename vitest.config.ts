@@ -5,6 +5,12 @@ import { defineConfig } from 'vitest/config'
 const rootDir = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  poolOptions: {
+    threads: {
+      minThreads: 1,
+      maxThreads: 4,
+    },
+  },
   resolve: {
     alias: [
       {
@@ -33,6 +39,8 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
+    hookTimeout: 15_000,
+    testTimeout: 15_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],

@@ -1,6 +1,6 @@
 import { parseSseEvent, type SseMetaData } from '../../../../../src/shared/sse-events.js'
 import { mergeStreamingChunk } from '../../../../../src/shared/streaming-merge.js'
-import { parseSseStream } from '../../lib/sse'
+import { parseSseStream, type SseMessage } from '../../lib/sse'
 import type { PanelPhase, RunStart } from './types'
 
 export type StreamController = {
@@ -16,6 +16,8 @@ export type StreamControllerOptions = {
   onMeta: (meta: SseMetaData) => void
   onError?: ((error: unknown) => string) | null
   fetchImpl?: typeof fetch
+  idleTimeoutMs?: number
+  idleTimeoutMessage?: string
   // Summarize mode callbacks (optional for chat mode)
   onReset?: (() => void) | null
   onBaseTitle?: ((text: string) => void) | null
@@ -53,8 +55,11 @@ export function createStreamController(options: StreamControllerOptions): Stream
     onDone,
     mode = 'summarize',
     streamingStatusText,
+    idleTimeoutMs = 120_000,
+    idleTimeoutMessage = 'No response from the daemon for a while. It may have stopped. Click “Try again”.',
   } = options
   let controller: AbortController | null = null
+  let activeAbortState: { reason: 'manual' | 'timeout' | null } | null = null
   let markdown = ''
   let chatContent = ''
   let renderQueued = 0
@@ -62,6 +67,7 @@ export function createStreamController(options: StreamControllerOptions): Stream
   let rememberedUrl = false
   let streaming = false
   let hadError = false
+  let sawDone = false
 
   const queueRender = () => {
     if (renderQueued || !onRender) return
@@ -81,8 +87,10 @@ export function createStreamController(options: StreamControllerOptions): Stream
 
   const abort = () => {
     if (!controller) return
+    if (activeAbortState) activeAbortState.reason = 'manual'
     controller.abort()
     controller = null
+    activeAbortState = null
     if (streaming) {
       streaming = false
       onPhaseChange('idle')
@@ -99,10 +107,13 @@ export function createStreamController(options: StreamControllerOptions): Stream
     abort()
     const nextController = new AbortController()
     controller = nextController
+    const abortState = { reason: null as 'manual' | 'timeout' | null }
+    activeAbortState = abortState
     streaming = true
     hadError = false
     streamedAnyNonWhitespace = false
     rememberedUrl = false
+    sawDone = false
     markdown = ''
     chatContent = ''
     onPhaseChange('connecting')
@@ -127,7 +138,28 @@ export function createStreamController(options: StreamControllerOptions): Stream
       onStatus(streamingStatusText ?? (mode === 'chat' ? '' : 'Summarizing…'))
       onPhaseChange('streaming')
 
-      for await (const msg of parseSseStream(res.body)) {
+      const iterator = parseSseStream(res.body)
+      const useIdleTimeout = Number.isFinite(idleTimeoutMs) && idleTimeoutMs > 0
+      const nextWithTimeout = async () => {
+        if (!useIdleTimeout) return iterator.next()
+        let timer: ReturnType<typeof setTimeout> | null = null
+        const timeoutPromise = new Promise<IteratorResult<SseMessage>>((_, reject) => {
+          timer = setTimeout(() => {
+            const error = new Error(idleTimeoutMessage)
+            error.name = 'IdleTimeoutError'
+            reject(error)
+          }, idleTimeoutMs)
+        })
+        try {
+          return await Promise.race([iterator.next(), timeoutPromise])
+        } finally {
+          if (timer) clearTimeout(timer)
+        }
+      }
+
+      while (true) {
+        const { value: msg, done } = await nextWithTimeout()
+        if (done) break
         if (nextController.signal.aborted) return
 
         const event = parseSseEvent(msg)
@@ -164,18 +196,29 @@ export function createStreamController(options: StreamControllerOptions): Stream
         } else if (event.event === 'error') {
           throw new Error(event.data.message)
         } else if (event.event === 'done') {
+          sawDone = true
           break
         }
       }
 
-      if (mode === 'summarize' && !streamedAnyNonWhitespace) {
+      if (nextController.signal.aborted) return
+      if (!sawDone) {
+        throw new Error('Stream ended unexpectedly. The daemon may have stopped.')
+      }
+      if (!streamedAnyNonWhitespace) {
         throw new Error('Model returned no output.')
       }
 
       onStatus('')
       onDone?.()
     } catch (err) {
-      if (nextController.signal.aborted) return
+      if (err instanceof Error && err.name === 'IdleTimeoutError') {
+        abortState.reason = 'timeout'
+        if (!nextController.signal.aborted) {
+          nextController.abort()
+        }
+      }
+      if (nextController.signal.aborted && abortState.reason !== 'timeout') return
       hadError = true
       const message = onError ? onError(err) : err instanceof Error ? err.message : String(err)
       onStatus(`Error: ${message}`)
@@ -187,6 +230,7 @@ export function createStreamController(options: StreamControllerOptions): Stream
         if (!nextController.signal.aborted && !hadError) {
           onPhaseChange('idle')
         }
+        activeAbortState = null
         await onSyncWithActiveTab?.()
       }
     }
