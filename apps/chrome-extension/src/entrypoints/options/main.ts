@@ -24,6 +24,7 @@ const formEl = byId<HTMLFormElement>('form')
 const statusEl = byId<HTMLSpanElement>('status')
 
 const tokenEl = byId<HTMLInputElement>('token')
+const tokenCopyBtn = byId<HTMLButtonElement>('tokenCopy')
 const modelPresetEl = byId<HTMLSelectElement>('modelPreset')
 const modelCustomEl = byId<HTMLInputElement>('modelCustom')
 const languagePresetEl = byId<HTMLSelectElement>('languagePreset')
@@ -131,6 +132,13 @@ let importedSkills: Skill[] = []
 
 const setStatus = (text: string) => {
   statusEl.textContent = text
+}
+
+let statusTimer = 0
+const flashStatus = (text: string, duration = 900) => {
+  window.clearTimeout(statusTimer)
+  setStatus(text)
+  statusTimer = window.setTimeout(() => setStatus(''), duration)
 }
 
 const setBuildInfo = () => {
@@ -1002,6 +1010,26 @@ tokenEl.addEventListener('input', () => {
     void refreshModelPresets(tokenEl.value)
     void checkDaemonStatus(tokenEl.value)
   }, 350)
+})
+
+tokenCopyBtn.addEventListener('click', async () => {
+  const token = tokenEl.value.trim()
+  if (!token) {
+    flashStatus('Token empty')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(token)
+    flashStatus('Token copied')
+    return
+  } catch {
+    // fallback
+  }
+  tokenEl.focus()
+  tokenEl.select()
+  tokenEl.setSelectionRange(0, token.length)
+  const ok = document.execCommand('copy')
+  flashStatus(ok ? 'Token copied' : 'Copy failed')
 })
 
 let modelRefreshAt = 0

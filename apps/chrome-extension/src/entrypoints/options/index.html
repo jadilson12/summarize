@@ -10,7 +10,13 @@
     <main>
       <div class="top">
         <h1>Summarize Settings</h1>
-        <div id="buildInfo" class="buildInfo"></div>
+        <div class="topMeta">
+          <div id="daemonStatus" class="daemonStatus daemonStatus--compact" data-state="warn">
+            <span class="daemonStatus__dot" aria-hidden="true"></span>
+            <span class="daemonStatus__text">Checking daemon…</span>
+          </div>
+          <div id="buildInfo" class="buildInfo"></div>
+        </div>
       </div>
       <form id="form">
         <div id="tabs" class="tabs" role="tablist" aria-label="Settings sections">
@@ -62,10 +68,6 @@
 
         <div id="panel-general" class="tabPanel" role="tabpanel" data-tab-panel="general" aria-labelledby="tab-general">
           <section class="section">
-            <div id="daemonStatus" class="daemonStatus" data-state="warn">
-              <span class="daemonStatus__dot" aria-hidden="true"></span>
-              <span class="daemonStatus__text">Checking daemon…</span>
-            </div>
             <div class="combo">
               <div id="autoToggle" class="row"></div>
               <span class="subtitle">Auto-summarize when the panel is open.</span>
@@ -91,7 +93,10 @@
             <h2>Token setup</h2>
             <label>
               <span>Token</span>
-              <input id="token" type="text" placeholder="(generated in side panel)" />
+              <div class="inputRow">
+                <input id="token" type="text" placeholder="(generated in side panel)" />
+                <button id="tokenCopy" type="button" class="miniButton copyButton">Copy</button>
+              </div>
             </label>
           </section>
         </div>
