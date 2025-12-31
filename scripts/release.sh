@@ -87,7 +87,9 @@ phase_chrome() {
     echo "Missing ${output_dir}/chrome-mv3 (wxt build failed?)"
     exit 1
   fi
-  run bash -c "cd \"${output_dir}\" && zip -r -FS \"${zip_path}\" chrome-mv3"
+  # Zip the *contents* of `chrome-mv3/` (no top-level folder) so users can unzip into any folder and load it via:
+  # chrome://extensions → Developer mode → "Load unpacked" (manifest.json at the folder root).
+  run bash -c "cd \"${output_dir}/chrome-mv3\" && zip -r -FS \"${zip_path}\" ."
   echo "Chrome extension: ${zip_path}"
 }
 
