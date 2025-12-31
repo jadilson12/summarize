@@ -47,6 +47,7 @@ const skillsListEl = byId<HTMLDivElement>('skillsList')
 const skillsEmptyEl = byId<HTMLDivElement>('skillsEmpty')
 const skillsConflictsEl = byId<HTMLDivElement>('skillsImportConflicts')
 const hoverSummariesToggleRoot = byId<HTMLDivElement>('hoverSummariesToggle')
+const summaryTimestampsToggleRoot = byId<HTMLDivElement>('summaryTimestampsToggle')
 const extendedLoggingToggleRoot = byId<HTMLDivElement>('extendedLoggingToggle')
 const requestModeEl = byId<HTMLSelectElement>('requestMode')
 const firecrawlModeEl = byId<HTMLSelectElement>('firecrawlMode')
@@ -120,6 +121,7 @@ let autoValue = defaultSettings.autoSummarize
 let chatEnabledValue = defaultSettings.chatEnabled
 let automationEnabledValue = defaultSettings.automationEnabled
 let hoverSummariesValue = defaultSettings.hoverSummaries
+let summaryTimestampsValue = defaultSettings.summaryTimestamps
 let extendedLoggingValue = defaultSettings.extendedLogging
 let advancedOpen = false
 
@@ -935,6 +937,25 @@ const hoverSummariesToggle = mountCheckbox(hoverSummariesToggleRoot, {
   onCheckedChange: handleHoverSummariesToggleChange,
 })
 
+const updateSummaryTimestampsToggle = () => {
+  summaryTimestampsToggle.update({
+    id: 'options-summary-timestamps',
+    label: 'Summary timestamps (media only)',
+    checked: summaryTimestampsValue,
+    onCheckedChange: handleSummaryTimestampsToggleChange,
+  })
+}
+const handleSummaryTimestampsToggleChange = (checked: boolean) => {
+  summaryTimestampsValue = checked
+  updateSummaryTimestampsToggle()
+}
+const summaryTimestampsToggle = mountCheckbox(summaryTimestampsToggleRoot, {
+  id: 'options-summary-timestamps',
+  label: 'Summary timestamps (media only)',
+  checked: summaryTimestampsValue,
+  onCheckedChange: handleSummaryTimestampsToggleChange,
+})
+
 const updateExtendedLoggingToggle = () => {
   extendedLoggingToggle.update({
     id: 'options-extended-logging',
@@ -977,11 +998,13 @@ async function load() {
   chatEnabledValue = s.chatEnabled
   automationEnabledValue = s.automationEnabled
   hoverSummariesValue = s.hoverSummaries
+  summaryTimestampsValue = s.summaryTimestamps
   extendedLoggingValue = s.extendedLogging
   updateAutoToggle()
   updateChatToggle()
   updateAutomationToggle()
   updateHoverSummariesToggle()
+  updateSummaryTimestampsToggle()
   updateExtendedLoggingToggle()
   maxCharsEl.value = String(s.maxChars)
   requestModeEl.value = s.requestMode
@@ -1084,6 +1107,7 @@ formEl.addEventListener('submit', (e) => {
       hoverSummaries: hoverSummariesValue,
       chatEnabled: chatEnabledValue,
       automationEnabled: automationEnabledValue,
+      summaryTimestamps: summaryTimestampsValue,
       extendedLogging: extendedLoggingValue,
       maxChars: Number(maxCharsEl.value) || defaultSettings.maxChars,
       requestMode: requestModeEl.value || defaultSettings.requestMode,

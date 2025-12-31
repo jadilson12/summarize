@@ -55,6 +55,7 @@ export function buildUrlPrompt({
     hasTranscript:
       isYouTube ||
       (extracted.transcriptSource !== null && extracted.transcriptSource !== 'unavailable'),
+    hasTranscriptTimestamps: Boolean(extracted.transcriptTimedText),
     summaryLength:
       lengthArg.kind === 'preset' ? lengthArg.preset : { maxCharacters: lengthArg.maxCharacters },
     outputLanguage,

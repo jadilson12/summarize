@@ -118,4 +118,22 @@ describe('buildLinkSummaryPrompt', () => {
     expect(prompt).toContain('Include at least 3 headings')
     expect(prompt).toContain('start with a heading')
   })
+
+  it('adds timestamp guidance when transcript timestamps are available', () => {
+    const prompt = buildLinkSummaryPrompt({
+      url: 'https://example.com/video',
+      title: 'Video',
+      siteName: 'YouTube',
+      description: null,
+      content: 'Transcript:\n[0:01] Hello',
+      truncated: false,
+      hasTranscript: true,
+      hasTranscriptTimestamps: true,
+      outputLanguage: { kind: 'fixed', tag: 'en', label: 'English' },
+      summaryLength: 'short',
+      shares: [],
+    })
+
+    expect(prompt).toContain('include the exact [mm:ss]')
+  })
 })

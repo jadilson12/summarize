@@ -284,6 +284,20 @@ chatMessagesEl.addEventListener('click', (event) => {
   void send({ type: 'panel:seek', seconds })
 })
 
+renderEl.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  const link = target.closest('a.chatTimestamp') as HTMLAnchorElement | null
+  if (!link) return
+  const href = link.getAttribute('href') ?? ''
+  if (!href.startsWith('timestamp:')) return
+  const seconds = parseTimestampHref(href)
+  if (seconds == null) return
+  event.preventDefault()
+  event.stopPropagation()
+  void send({ type: 'panel:seek', seconds })
+})
+
 const summarizeControl = mountSummarizeControl(summarizeControlRoot, {
   value: inputMode,
   mediaAvailable: false,
@@ -544,13 +558,20 @@ window.addEventListener('unhandledrejection', (event) => {
 function renderMarkdown(markdown: string) {
   panelState.summaryMarkdown = markdown
   try {
-    renderEl.innerHTML = md.render(markdown)
+    renderEl.innerHTML = md.render(linkifyTimestamps(markdown))
   } catch (err) {
     const message = err instanceof Error ? err.stack || err.message : String(err)
     headerController.setStatus(`Error: ${message}`)
     return
   }
   for (const a of Array.from(renderEl.querySelectorAll('a'))) {
+    const href = a.getAttribute('href') ?? ''
+    if (href.startsWith('timestamp:')) {
+      a.classList.add('chatTimestamp')
+      a.removeAttribute('target')
+      a.removeAttribute('rel')
+      continue
+    }
     a.setAttribute('target', '_blank')
     a.setAttribute('rel', 'noopener noreferrer')
   }
@@ -1823,6 +1844,33 @@ function sendSummarize(opts?: { refresh?: boolean }) {
     refresh: Boolean(opts?.refresh),
     inputMode: inputModeOverride ?? undefined,
   })
+}
+
+const timestampPattern = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g
+
+function linkifyTimestamps(content: string): string {
+  return content.replace(timestampPattern, (match, time) => {
+    const seconds = parseTimestampSeconds(time)
+    if (seconds == null) return match
+    return `[${time}](timestamp:${seconds})`
+  })
+}
+
+function parseTimestampSeconds(value: string): number | null {
+  const parts = value.split(':').map((part) => part.trim())
+  if (parts.length < 2 || parts.length > 3) return null
+  const secondsPart = parts.pop()
+  if (!secondsPart) return null
+  const seconds = Number(secondsPart)
+  if (!Number.isFinite(seconds) || seconds < 0) return null
+  const minutesPart = parts.pop()
+  if (minutesPart == null) return null
+  const minutes = Number(minutesPart)
+  if (!Number.isFinite(minutes) || minutes < 0) return null
+  const hoursPart = parts.pop()
+  const hours = hoursPart != null ? Number(hoursPart) : 0
+  if (!Number.isFinite(hours) || hours < 0) return null
+  return Math.floor(hours * 3600 + minutes * 60 + seconds)
 }
 
 function parseTimestampHref(href: string): number | null {

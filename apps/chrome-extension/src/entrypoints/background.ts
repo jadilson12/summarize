@@ -913,6 +913,13 @@ export default defineBackground(() => {
     const resolvedPayload = { ...resolvedExtracted, title: resolvedTitle }
     const wordCount =
       resolvedPayload.text.length > 0 ? resolvedPayload.text.split(/\s+/).filter(Boolean).length : 0
+    const wantsSummaryTimestamps =
+      settings.summaryTimestamps &&
+      (opts?.inputMode === 'video' ||
+        resolvedPayload.media?.hasVideo === true ||
+        resolvedPayload.media?.hasAudio === true ||
+        resolvedPayload.media?.hasCaptions === true ||
+        shouldPreferUrlMode(resolvedPayload.url))
 
     cachedExtracts.set(tab.id, {
       url: resolvedPayload.url,
@@ -942,6 +949,7 @@ export default defineBackground(() => {
         settings,
         noCache: Boolean(opts?.refresh),
         inputMode: opts?.inputMode,
+        timestamps: wantsSummaryTimestamps,
       })
       const res = await fetch('http://127.0.0.1:8787/v1/summarize', {
         method: 'POST',

@@ -48,6 +48,7 @@ export function buildLinkSummaryPrompt({
   content,
   truncated,
   hasTranscript,
+  hasTranscriptTimestamps = false,
   outputLanguage,
   summaryLength,
   shares,
@@ -62,6 +63,7 @@ export function buildLinkSummaryPrompt({
   content: string
   truncated: boolean
   hasTranscript: boolean
+  hasTranscriptTimestamps?: boolean
   summaryLength: SummaryLengthTarget
   outputLanguage?: OutputLanguage | null
   shares: ShareContextEntry[]
@@ -147,6 +149,9 @@ export function buildLinkSummaryPrompt({
       : 'You are not given any quotes from people who shared this link. Do not fabricate reactions or add a "What sharers are saying" subsection.'
 
   const shareBlock = shares.length > 0 ? `Tweets from sharers:\n${shareLines.join('\n')}` : ''
+  const timestampInstruction = hasTranscriptTimestamps
+    ? 'When referencing specific moments, include the exact [mm:ss] (or [hh:mm:ss]) timestamp from the transcript inline. Do not invent timestamps or use ranges.'
+    : ''
   const baseInstructions = [
     audienceLine,
     directive.guidance,
@@ -162,6 +167,7 @@ export function buildLinkSummaryPrompt({
     'Format the answer in Markdown and obey the length-specific formatting above.',
     'Use short paragraphs; use bullet lists only when they improve scanability; avoid rigid templates.',
     'Base everything strictly on the provided content and never invent details.',
+    timestampInstruction,
     shareGuidance,
   ]
     .filter((line) => typeof line === 'string' && line.trim().length > 0)

@@ -94,7 +94,7 @@ export async function fetchLinkContent(
 
     return finalizeExtractedLinkContent({
       url,
-      baseContent: selectBaseContent('', transcriptResolution.text),
+      baseContent: selectBaseContent('', transcriptResolution.text, transcriptResolution.segments),
       maxCharacters,
       title: null,
       description: null,
@@ -153,7 +153,7 @@ export async function fetchLinkContent(
 
     return finalizeExtractedLinkContent({
       url,
-      baseContent: selectBaseContent('', transcriptResolution.text),
+      baseContent: selectBaseContent('', transcriptResolution.text, transcriptResolution.segments),
       maxCharacters,
       title: null,
       description: null,
@@ -205,7 +205,7 @@ export async function fetchLinkContent(
 
     return finalizeExtractedLinkContent({
       url,
-      baseContent: selectBaseContent('', transcriptResolution.text),
+      baseContent: selectBaseContent('', transcriptResolution.text, transcriptResolution.segments),
       maxCharacters,
       title: null,
       description: null,
@@ -330,7 +330,11 @@ export async function fetchLinkContent(
       )
       const result = finalizeExtractedLinkContent({
         url,
-        baseContent: selectBaseContent(text, transcriptResolution.text),
+        baseContent: selectBaseContent(
+          text,
+          transcriptResolution.text,
+          transcriptResolution.segments
+        ),
         maxCharacters,
         title,
         description,

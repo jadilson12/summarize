@@ -54,18 +54,21 @@ export function buildSummarizeRequestBody({
   settings,
   noCache,
   inputMode,
+  timestamps,
 }: {
   extracted: ExtractedPage
   settings: Settings
   noCache?: boolean
   inputMode?: 'page' | 'video'
+  timestamps?: boolean
 }): Record<string, unknown> {
   const baseBody = buildDaemonRequestBody({ extracted, settings, noCache })
+  const withTimestamps = timestamps ? { ...baseBody, timestamps: true } : baseBody
   if (inputMode === 'video') {
-    return { ...baseBody, mode: 'url', videoMode: 'transcript' }
+    return { ...withTimestamps, mode: 'url', videoMode: 'transcript' }
   }
   if (inputMode === 'page') {
-    return { ...baseBody, mode: 'page' }
+    return { ...withTimestamps, mode: 'page' }
   }
-  return baseBody
+  return withTimestamps
 }

@@ -103,4 +103,19 @@ describe('chrome/daemon-payload', () => {
     expect(body.mode).toBe('page')
     expect(body.videoMode).toBeUndefined()
   })
+
+  it('adds timestamps when requested', () => {
+    const body = buildSummarizeRequestBody({
+      extracted: {
+        url: 'https://example.com/video',
+        title: 'Video',
+        text: '',
+        truncated: false,
+      },
+      settings: defaultSettings,
+      timestamps: true,
+    })
+
+    expect(body.timestamps).toBe(true)
+  })
 })

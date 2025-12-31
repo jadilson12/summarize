@@ -101,11 +101,19 @@ export function pickFirstText(candidates: Array<string | null | undefined>): str
   return null
 }
 
-export function selectBaseContent(sourceContent: string, transcriptText: string | null): string {
-  if (!transcriptText) {
+export function selectBaseContent(
+  sourceContent: string,
+  transcriptText: string | null,
+  transcriptSegments?: TranscriptResolution['segments']
+): string {
+  const timedTranscript = transcriptSegments?.length
+    ? formatTranscriptSegments(transcriptSegments)
+    : null
+  const transcriptCandidate = timedTranscript ?? transcriptText
+  if (!transcriptCandidate) {
     return sourceContent
   }
-  const normalizedTranscript = normalizeForPrompt(transcriptText)
+  const normalizedTranscript = normalizeForPrompt(transcriptCandidate)
   if (normalizedTranscript.length === 0) {
     return sourceContent
   }
