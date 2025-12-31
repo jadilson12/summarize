@@ -1,4 +1,4 @@
-# Summarize - Point at any URL or file. Get the gist.
+# Summarize 👉 Point at any URL or file. Get the gist.
 
 Fast summaries from URLs, files, and media. Works in the terminal and a Chrome Side Panel.
 
@@ -41,15 +41,6 @@ Notes:
 - Daemon is localhost-only and requires a shared token.
 - Autostart: macOS (launchd), Linux (systemd user), Windows (Scheduled Task).
 - Tip: configure `free` via `summarize refresh-free` (needs `OPENROUTER_API_KEY`). Add `--set-default` to set model=`free`.
-
-Troubleshooting:
-
-- "Receiving end does not exist": Chrome did not inject the content script yet.
-  - Extension details -> Site access -> On all sites (or allow this domain)
-  - Reload the tab once.
-- "Failed to fetch" / daemon unreachable:
-  - `summarize daemon status`
-  - Logs: `~/.summarize/logs/daemon.err.log`
 
 More:
 
@@ -479,5 +470,14 @@ pnpm check
 - YouTube handling: `docs/youtube.md`
 - Media pipeline: `docs/media.md`
 - Config schema and precedence: `docs/config.md`
+
+## Troubleshooting
+
+- "Receiving end does not exist": Chrome did not inject the content script yet.
+  - Extension details -> Site access -> On all sites (or allow this domain)
+  - Reload the tab once.
+- "Failed to fetch" / daemon unreachable:
+  - `summarize daemon status`
+  - Logs: `~/.summarize/logs/daemon.err.log`
 
 License: MIT
