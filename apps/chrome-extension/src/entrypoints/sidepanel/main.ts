@@ -137,6 +137,10 @@ const chatMessagesEl = byId<HTMLDivElement>('chatMessages')
 const chatInputEl = byId<HTMLTextAreaElement>('chatInput')
 const chatSendBtn = byId<HTMLButtonElement>('chatSend')
 const chatContextStatusEl = byId<HTMLDivElement>('chatContextStatus')
+const automationNoticeEl = byId<HTMLDivElement>('automationNotice')
+const automationNoticeTitleEl = byId<HTMLDivElement>('automationNoticeTitle')
+const automationNoticeMessageEl = byId<HTMLDivElement>('automationNoticeMessage')
+const automationNoticeActionBtn = byId<HTMLButtonElement>('automationNoticeAction')
 const chatJumpBtn = byId<HTMLButtonElement>('chatJump')
 const chatQueueEl = byId<HTMLDivElement>('chatQueue')
 
@@ -202,6 +206,52 @@ const chatController = new ChatController({
   limits: chatLimits,
   scrollToBottom: () => scrollToBottom(),
   onNewContent: () => updateAutoScrollLock(),
+})
+
+type AutomationNoticeAction = 'extensions' | 'options'
+
+function hideAutomationNotice() {
+  automationNoticeEl.classList.add('hidden')
+}
+
+function showAutomationNotice({
+  title,
+  message,
+  ctaLabel,
+  ctaAction,
+}: {
+  title: string
+  message: string
+  ctaLabel?: string
+  ctaAction?: AutomationNoticeAction
+}) {
+  automationNoticeTitleEl.textContent = title
+  automationNoticeMessageEl.textContent = message
+  automationNoticeActionBtn.textContent = ctaLabel || 'Open extension details'
+  automationNoticeActionBtn.onclick = () => {
+    if (ctaAction === 'options') {
+      void chrome.runtime.openOptionsPage()
+      return
+    }
+    void chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` })
+  }
+  automationNoticeEl.classList.remove('hidden')
+}
+
+window.addEventListener('summarize:automation-permissions', (event) => {
+  const detail = (event as CustomEvent<{
+    title?: string
+    message?: string
+    ctaLabel?: string
+    ctaAction?: AutomationNoticeAction
+  }>).detail
+  if (!detail?.message) return
+  showAutomationNotice({
+    title: detail.title ?? 'Automation permission required',
+    message: detail.message,
+    ctaLabel: detail.ctaLabel,
+    ctaAction: detail.ctaAction,
+  })
 })
 
 type AgentResponse = { ok: boolean; assistant?: AssistantMessage; error?: string }
@@ -1795,6 +1845,7 @@ function updateControls(state: UiState) {
   })
   chatEnabledValue = state.settings.chatEnabled
   automationEnabledValue = state.settings.automationEnabled
+  if (!automationEnabledValue) hideAutomationNotice()
   applyChatEnabled()
   if (chatEnabledValue && activeTabId && chatController.getMessages().length === 0) {
     void restoreChatHistory()
@@ -2303,6 +2354,7 @@ void (async () => {
   autoValue = s.autoSummarize
   chatEnabledValue = s.chatEnabled
   automationEnabledValue = s.automationEnabled
+  if (!automationEnabledValue) hideAutomationNotice()
   autoToggle.update({
     id: 'sidepanel-auto',
     label: 'Auto summarize',
@@ -2359,6 +2411,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   const nextAutomationEnabled = (nextSettings as { automationEnabled?: unknown }).automationEnabled
   if (typeof nextAutomationEnabled === 'boolean') {
     automationEnabledValue = nextAutomationEnabled
+    if (!automationEnabledValue) hideAutomationNotice()
   }
 })
 

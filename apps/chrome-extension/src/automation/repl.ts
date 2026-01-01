@@ -1,5 +1,13 @@
+import {
+  deleteArtifact,
+  getArtifactRecord,
+  listArtifacts,
+  parseArtifact,
+  upsertArtifact,
+} from './artifacts-store'
 import { executeNavigateTool } from './navigate'
 import { listSkills } from './skills-store'
+import { buildUserScriptsGuidance, getUserScriptsStatus } from './userscripts'
 
 export type ReplArgs = {
   title: string
@@ -131,8 +139,6 @@ async function runBrowserJs(
   const libraries = skills.map((skill) => skill.library).filter(Boolean)
   const nativeInputEnabled = await hasDebuggerPermission()
 
-  const payload = { fnSource, libraries, nativeInputEnabled, args }
-
   const userScripts = chrome.userScripts as
     | {
         execute?: (options: {
@@ -149,46 +155,46 @@ async function runBrowserJs(
         }) => Promise<void>
       }
     | undefined
+  // userScripts is required for main-world execution; isolated-world fallback is intentionally avoided.
+  const status = await getUserScriptsStatus()
+  if (!userScripts?.execute || !status.apiAvailable) {
+    throw new Error(buildUserScriptsGuidance(status))
+  }
+  if (!status.permissionGranted) {
+    throw new Error(buildUserScriptsGuidance(status))
+  }
 
-  if (userScripts?.execute) {
-    const hasPermission = await chrome.permissions.contains({ permissions: ['userScripts'] })
-    if (!hasPermission) {
-      throw new Error(
-        'User Scripts permission is required. Enable it in Options → Automation permissions, then allow “User Scripts” in chrome://extensions.'
-      )
-    }
+  const terminate =
+    // @ts-expect-error - terminate is not yet in the type definitions
+    typeof chrome.userScripts?.terminate === 'function'
+      ? // @ts-expect-error - terminate is not yet in the type definitions
+        chrome.userScripts.terminate.bind(chrome.userScripts)
+      : null
 
-    const terminate =
-      // @ts-expect-error - terminate is not yet in the type definitions
-      typeof chrome.userScripts?.terminate === 'function'
-        ? // @ts-expect-error - terminate is not yet in the type definitions
-          chrome.userScripts.terminate.bind(chrome.userScripts)
-        : null
+  const executionId = terminate ? crypto.randomUUID() : undefined
+  let abortHandler: (() => void) | null = null
 
-    const executionId = terminate ? crypto.randomUUID() : undefined
-    let abortHandler: (() => void) | null = null
-
-    if (signal && executionId && terminate) {
-      abortHandler = () => {
-        try {
-          terminate(tab.id, executionId)
-        } catch {
-          // ignore
-        }
-      }
-      signal.addEventListener('abort', abortHandler, { once: true })
-    }
-
-    const argsJson = (() => {
+  if (signal && executionId && terminate) {
+    abortHandler = () => {
       try {
-        return JSON.stringify(args ?? [])
+        terminate(tab.id, executionId)
       } catch {
-        return '[]'
+        // ignore
       }
-    })()
+    }
+    signal.addEventListener('abort', abortHandler, { once: true })
+  }
 
-    const libs = libraries.filter(Boolean).join('\n')
-    const wrapperCode = `
+  const argsJson = (() => {
+    try {
+      return JSON.stringify(args ?? [])
+    } catch {
+      return '[]'
+    }
+  })()
+
+  const libs = libraries.filter(Boolean).join('\n')
+  const wrapperCode = `
       (async () => {
         const logs = []
         const capture = (...args) => {
@@ -216,6 +222,22 @@ async function runBrowserJs(
             }
             window.addEventListener('message', handler)
             window.postMessage({ source: 'summarize-native-input', requestId, payload }, '*')
+          })
+        }
+
+        const sendArtifactRpc = (action, payload) => {
+          return new Promise((resolve, reject) => {
+            const requestId = \`\${Date.now()}-\${Math.random().toString(36).slice(2)}\`
+            const handler = (event) => {
+              if (event.source !== window) return
+              const msg = event.data || {}
+              if (msg?.source !== 'summarize-artifacts' || msg.requestId !== requestId) return
+              window.removeEventListener('message', handler)
+              if (msg.ok) resolve(msg.result)
+              else reject(new Error(msg.error || 'Artifact operation failed'))
+            }
+            window.addEventListener('message', handler)
+            window.postMessage({ source: 'summarize-artifacts', requestId, action, payload }, '*')
           })
         }
 
@@ -251,9 +273,20 @@ async function runBrowserJs(
           }
         }
 
+        const attachArtifactHelpers = () => {
+          window.listArtifacts = async () => sendArtifactRpc('listArtifacts', {})
+          window.getArtifact = async (fileName, options) =>
+            sendArtifactRpc('getArtifact', { fileName, ...(options || {}) })
+          window.createOrUpdateArtifact = async (fileName, content, mimeType) =>
+            sendArtifactRpc('createOrUpdateArtifact', { fileName, content, mimeType })
+          window.deleteArtifact = async (fileName) =>
+            sendArtifactRpc('deleteArtifact', { fileName })
+        }
+
         try {
-          ${libs}
           attachNativeHelpers()
+          attachArtifactHelpers()
+          ${libs}
           const fn = (${fnSource})
           const args = ${argsJson}
           const value = await fn(...args)
@@ -267,156 +300,33 @@ async function runBrowserJs(
       })()
     `
 
-    try {
-      await userScripts.configureWorld?.({
-        worldId: 'summarize-browserjs',
-        messaging: false,
-        csp: "script-src 'unsafe-eval' 'unsafe-inline'; connect-src 'none'; img-src 'none'; media-src 'none'; frame-src 'none'; font-src 'none'; object-src 'none'; default-src 'none';",
-      })
-    } catch {
-      // ignore
-    }
-
-    const results = await userScripts.execute({
-      target: { tabId: tab.id },
-      world: 'USER_SCRIPT',
+  try {
+    await userScripts.configureWorld?.({
       worldId: 'summarize-browserjs',
-      injectImmediately: true,
-      js: [{ code: wrapperCode }],
-      ...(executionId ? { executionId } : {}),
+      messaging: false,
+      csp: "script-src 'unsafe-eval' 'unsafe-inline'; connect-src 'none'; img-src 'none'; media-src 'none'; frame-src 'none'; font-src 'none'; object-src 'none'; default-src 'none';",
     })
-
-    if (signal?.aborted) {
-      if (abortHandler) signal.removeEventListener('abort', abortHandler)
-      return { ok: false, error: 'Execution aborted' }
-    }
-
-    const result = results?.[0]?.result as BrowserJsResult | undefined
-    if (abortHandler) signal?.removeEventListener('abort', abortHandler)
-    return result ?? { ok: false, error: 'No result from browserjs()' }
+  } catch {
+    // ignore
   }
 
-  const injection: chrome.scripting.ScriptInjection = {
+  const results = await userScripts.execute({
     target: { tabId: tab.id },
-    func: (data: {
-      fnSource: string
-      libraries: string[]
-      nativeInputEnabled: boolean
-      args: unknown[]
-    }) => {
-      const logs: string[] = []
-      const capture = (...args: unknown[]) => {
-        logs.push(
-          args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' ')
-        )
-      }
-      const originalLog = console.log
-      console.log = (...args: unknown[]) => {
-        capture(...args)
-        originalLog(...args)
-      }
-
-      const runSnippet = (snippet: string) => {
-        const fn = new Function(snippet)
-        fn()
-      }
-
-      const postNativeInput = (payload: Record<string, unknown>) => {
-        if (!data.nativeInputEnabled) {
-          throw new Error('Native input requires debugger permission')
-        }
-        return new Promise((resolve, reject) => {
-          const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-          const handler = (event: MessageEvent) => {
-            if (event.source !== window) return
-            const msg = event.data as {
-              source?: string
-              requestId?: string
-              ok?: boolean
-              error?: string
-            }
-            if (msg?.source !== 'summarize-native-input' || msg.requestId !== requestId) return
-            window.removeEventListener('message', handler)
-            if (msg.ok) resolve(true)
-            else reject(new Error(msg.error || 'Native input failed'))
-          }
-          window.addEventListener('message', handler)
-          window.postMessage({ source: 'summarize-native-input', requestId, payload }, '*')
-        })
-      }
-
-      const attachNativeHelpers = () => {
-        const resolveElement = (selector: string) => {
-          const el = document.querySelector(selector)
-          if (!el) throw new Error(`Element not found: ${selector}`)
-          return el as HTMLElement
-        }
-
-        ;(window as unknown as { nativeClick?: (selector: string) => Promise<void> }).nativeClick =
-          async (selector: string) => {
-            const el = resolveElement(selector)
-            const rect = el.getBoundingClientRect()
-            await postNativeInput({
-              action: 'click',
-              x: rect.left + rect.width / 2,
-              y: rect.top + rect.height / 2,
-            })
-          }
-
-        ;(
-          window as unknown as { nativeType?: (selector: string, text: string) => Promise<void> }
-        ).nativeType = async (selector: string, text: string) => {
-          const el = resolveElement(selector)
-          el.focus()
-          await postNativeInput({ action: 'type', text })
-        }
-
-        ;(window as unknown as { nativePress?: (key: string) => Promise<void> }).nativePress =
-          async (key: string) => {
-            await postNativeInput({ action: 'press', key })
-          }
-
-        ;(window as unknown as { nativeKeyDown?: (key: string) => Promise<void> }).nativeKeyDown =
-          async (key: string) => {
-            await postNativeInput({ action: 'keydown', key })
-          }
-
-        ;(window as unknown as { nativeKeyUp?: (key: string) => Promise<void> }).nativeKeyUp =
-          async (key: string) => {
-            await postNativeInput({ action: 'keyup', key })
-          }
-      }
-
-      const execute = async () => {
-        for (const lib of data.libraries) {
-          if (!lib) continue
-          runSnippet(lib)
-        }
-        attachNativeHelpers()
-        const fn = new Function(`return (${data.fnSource})`)()
-        const value = await fn(...(data.args ?? []))
-        return { ok: true as const, value, logs }
-      }
-
-      return execute()
-        .catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error)
-          return { ok: false as const, error: message, logs }
-        })
-        .finally(() => {
-          console.log = originalLog
-        })
-    },
-    args: [payload],
-  }
-
-  const [result] = await chrome.scripting.executeScript(injection)
+    world: 'USER_SCRIPT',
+    worldId: 'summarize-browserjs',
+    injectImmediately: true,
+    js: [{ code: wrapperCode }],
+    ...(executionId ? { executionId } : {}),
+  })
 
   if (signal?.aborted) {
+    if (abortHandler) signal.removeEventListener('abort', abortHandler)
     return { ok: false, error: 'Execution aborted' }
   }
 
-  return (result?.result ?? { ok: false, error: 'No result from browserjs()' }) as BrowserJsResult
+  const result = results?.[0]?.result as BrowserJsResult | undefined
+  if (abortHandler) signal?.removeEventListener('abort', abortHandler)
+  return result ?? { ok: false, error: 'No result from browserjs()' }
 }
 
 function buildSandboxHtml(): string {
@@ -506,6 +416,14 @@ function buildSandboxHtml(): string {
 
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+            const listArtifacts = async () => sendRpc('listArtifacts', {})
+            const getArtifact = async (fileName, options) =>
+              sendRpc('getArtifact', { fileName, ...(options || {}) })
+            const createOrUpdateArtifact = async (fileName, content, mimeType) =>
+              sendRpc('createOrUpdateArtifact', { fileName, content, mimeType })
+            const deleteArtifact = async (fileName) =>
+              sendRpc('deleteArtifact', { fileName })
+
             const returnFile = (fileNameOrObj, maybeContent, maybeMimeType) => {
               let fileName = ''
               let content = ''
@@ -528,8 +446,29 @@ function buildSandboxHtml(): string {
 
             try {
               const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
-              const fn = new AsyncFunction('browserjs', 'navigate', 'sleep', 'returnFile', 'console', code)
-              const result = await fn(browserjs, navigate, sleep, returnFile, console)
+              const fn = new AsyncFunction(
+                'browserjs',
+                'navigate',
+                'sleep',
+                'returnFile',
+                'createOrUpdateArtifact',
+                'getArtifact',
+                'listArtifacts',
+                'deleteArtifact',
+                'console',
+                code
+              )
+              const result = await fn(
+                browserjs,
+                navigate,
+                sleep,
+                returnFile,
+                createOrUpdateArtifact,
+                getArtifact,
+                listArtifacts,
+                deleteArtifact,
+                console
+              )
               if (result !== undefined) {
                 logs.push(\`=> \${formatValue(result)}\`)
               }
@@ -561,6 +500,13 @@ async function runSandboxedRepl(
   handlers: {
     onBrowserJs: (payload: { fnSource: string; args: unknown[] }) => Promise<unknown>
     onNavigate: (payload: { url: string; newTab?: boolean }) => Promise<unknown>
+    onArtifacts: (payload: {
+      action: 'list' | 'get' | 'upsert' | 'delete'
+      fileName?: string
+      content?: unknown
+      mimeType?: string
+      asBase64?: boolean
+    }) => Promise<unknown>
   },
   signal?: AbortSignal
 ): Promise<{ logs: string[]; files: SandboxFile[]; error?: string }> {
@@ -622,6 +568,63 @@ async function runSandboxedRepl(
               const result = await handlers.onNavigate(
                 data.payload as { url: string; newTab?: boolean }
               )
+              iframe.contentWindow?.postMessage(
+                {
+                  source: 'summarize-repl',
+                  type: 'rpc-result',
+                  requestId: data.requestId,
+                  ok: true,
+                  result,
+                },
+                '*'
+              )
+            } else if (data.action === 'listArtifacts') {
+              const result = await handlers.onArtifacts({ action: 'list' })
+              iframe.contentWindow?.postMessage(
+                {
+                  source: 'summarize-repl',
+                  type: 'rpc-result',
+                  requestId: data.requestId,
+                  ok: true,
+                  result,
+                },
+                '*'
+              )
+            } else if (data.action === 'getArtifact') {
+              const result = await handlers.onArtifacts({
+                action: 'get',
+                ...(data.payload as { fileName?: string; asBase64?: boolean }),
+              })
+              iframe.contentWindow?.postMessage(
+                {
+                  source: 'summarize-repl',
+                  type: 'rpc-result',
+                  requestId: data.requestId,
+                  ok: true,
+                  result,
+                },
+                '*'
+              )
+            } else if (data.action === 'createOrUpdateArtifact') {
+              const result = await handlers.onArtifacts({
+                action: 'upsert',
+                ...(data.payload as { fileName?: string; content?: unknown; mimeType?: string }),
+              })
+              iframe.contentWindow?.postMessage(
+                {
+                  source: 'summarize-repl',
+                  type: 'rpc-result',
+                  requestId: data.requestId,
+                  ok: true,
+                  result,
+                },
+                '*'
+              )
+            } else if (data.action === 'deleteArtifact') {
+              const result = await handlers.onArtifacts({
+                action: 'delete',
+                ...(data.payload as { fileName?: string }),
+              })
               iframe.contentWindow?.postMessage(
                 {
                   source: 'summarize-repl',
@@ -726,6 +729,63 @@ export async function executeReplTool(args: ReplArgs): Promise<ReplResult> {
           return res.value
         },
         onNavigate: async (input) => executeNavigateTool(input),
+        onArtifacts: async (payload) => {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          if (!tab?.id) throw new Error('No active tab')
+          const tabId = tab.id
+
+          if (payload.action === 'list') {
+            const records = await listArtifacts(tabId)
+            return records.map(({ fileName, mimeType, size, updatedAt }) => ({
+              fileName,
+              mimeType,
+              size,
+              updatedAt,
+            }))
+          }
+
+          if (payload.action === 'get') {
+            if (!payload.fileName) throw new Error('Missing fileName')
+            const record = await getArtifactRecord(tabId, payload.fileName)
+            if (!record) throw new Error(`Artifact not found: ${payload.fileName}`)
+            if (payload.asBase64) {
+              return record
+            }
+            const isText =
+              record.mimeType.startsWith('text/') ||
+              record.mimeType === 'application/json' ||
+              record.fileName.endsWith('.json')
+            return isText ? parseArtifact(record) : record
+          }
+
+          if (payload.action === 'upsert') {
+            if (!payload.fileName) throw new Error('Missing fileName')
+            const record = await upsertArtifact(tabId, {
+              fileName: payload.fileName,
+              content: payload.content,
+              mimeType: payload.mimeType,
+              contentBase64:
+                typeof payload.content === 'object' &&
+                payload.content &&
+                'contentBase64' in payload.content
+                  ? (payload.content as { contentBase64?: string }).contentBase64
+                  : undefined,
+            })
+            return {
+              fileName: record.fileName,
+              mimeType: record.mimeType,
+              size: record.size,
+              updatedAt: record.updatedAt,
+            }
+          }
+
+          if (payload.action === 'delete') {
+            if (!payload.fileName) throw new Error('Missing fileName')
+            return { ok: await deleteArtifact(tabId, payload.fileName) }
+          }
+
+          throw new Error(`Unknown artifact action: ${payload.action}`)
+        },
       },
       abortController.signal
     )

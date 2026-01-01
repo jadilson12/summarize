@@ -870,6 +870,31 @@ test('sidepanel shows daemon upgrade hint when /v1/agent is missing', async () =
   }
 })
 
+test('sidepanel shows automation notice when permission event fires', async () => {
+  const harness = await launchExtension()
+
+  try {
+    const page = await openExtensionPage(harness, 'sidepanel.html', '#title')
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent('summarize:automation-permissions', {
+          detail: {
+            title: 'User Scripts required',
+            message: 'Enable User Scripts to use automation.',
+            ctaLabel: 'Open extension details',
+          },
+        })
+      )
+    })
+
+    await expect(page.locator('#automationNotice')).toBeVisible()
+    await expect(page.locator('#automationNoticeMessage')).toContainText('Enable User Scripts')
+    assertNoErrors(harness)
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir)
+  }
+})
+
 test('sidepanel chat queue sends next message after stream completes', async () => {
   const harness = await launchExtension()
 
@@ -1487,7 +1512,7 @@ test('options shows user scripts guidance when unavailable', async () => {
     await expect(page.locator('#automationPermissions')).toBeEnabled()
     await expect(page.locator('#automationPermissions')).toHaveText('Enable automation permissions')
     await expect(page.locator('#userScriptsNotice')).toBeVisible()
-    await expect(page.locator('#userScriptsNotice')).toContainText('User Scripts API is not available')
+    await expect(page.locator('#userScriptsNotice')).toContainText(/User Scripts|chrome:\/\//)
     assertNoErrors(harness)
   } finally {
     await closeExtension(harness.context, harness.userDataDir)

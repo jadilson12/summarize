@@ -119,6 +119,15 @@
       <section id="chatContainer" class="chatContainer">
         <div id="chatMessages" class="chatMessages isHidden"></div>
         <div id="chatContextStatus" class="chatContextStatus isHidden"></div>
+        <div id="automationNotice" class="automationNotice hidden" role="status" aria-live="polite">
+          <div id="automationNoticeTitle" class="automationNotice__title"></div>
+          <div id="automationNoticeMessage" class="automationNotice__message"></div>
+          <div class="automationNotice__actions">
+            <button id="automationNoticeAction" type="button" class="ghost small">
+              Open extension details
+            </button>
+          </div>
+        </div>
         <div id="chatMetricsSlot" class="chatMetricsSlot"></div>
       </section>
     </main>

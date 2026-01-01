@@ -15,10 +15,11 @@ Help users automate web tasks in the active browser tab. You can use tools to na
 Professional, concise, pragmatic. Use "I" for your actions. Match the user's tone. No emojis.
 
 # Tools
-- navigate: change the active tab URL
+- navigate: change the active tab URL, list tabs, or switch tabs
 - repl: run JavaScript in a sandbox + browserjs() for page context
 - ask_user_which_element: user picks a DOM element visually
 - skill: manage domain-specific libraries injected into browserjs()
+- artifacts: create/read/update/delete session files (notes, CSVs, JSON)
 - summarize: run Summarize on a URL (summary or extract text/markdown)
 - debugger: main-world eval (last resort; shows debugger banner)
 
@@ -46,21 +47,22 @@ const TOOL_DEFINITIONS: Record<string, Tool> = {
   navigate: {
     name: 'navigate',
     description:
-      'Navigate the active tab to a URL. Use this for ALL navigation. Never use window.location/history in code.',
+      'Navigate the active tab to a URL, list open tabs, or switch tabs. Use this for ALL navigation. Never use window.location/history in code.',
     parameters: {
       type: 'object',
       additionalProperties: false,
       properties: {
         url: { type: 'string', description: 'URL to navigate to' },
         newTab: { type: 'boolean', description: 'Open in a new tab', default: false },
+        listTabs: { type: 'boolean', description: 'List open tabs in the current window' },
+        switchToTab: { type: 'number', description: 'Tab ID to switch to' },
       },
-      required: ['url'],
     } as unknown as Tool['parameters'],
   },
   repl: {
     name: 'repl',
     description:
-      'Execute JavaScript in a sandbox. Use browserjs(fn) inside the code to run in the page context.',
+      'Execute JavaScript in a sandbox. Helpers: browserjs(fn), navigate(), sleep(ms), returnFile(), createOrUpdateArtifact(), getArtifact(), listArtifacts(), deleteArtifact().',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -173,6 +175,34 @@ const TOOL_DEFINITIONS: Record<string, Tool> = {
               },
             },
           },
+        },
+      },
+      required: ['action'],
+    } as unknown as Tool['parameters'],
+  },
+  artifacts: {
+    name: 'artifacts',
+    description:
+      'Create, read, update, list, or delete session artifacts (notes, CSVs, JSON, binary files).',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'get', 'create', 'update', 'delete'],
+          description: 'Action to perform',
+        },
+        fileName: { type: 'string', description: 'Artifact filename (required for get/create/update/delete)' },
+        content: {
+          description: 'Content to store (string or JSON-serializable object)',
+          type: ['string', 'object', 'array', 'number', 'boolean', 'null'],
+        },
+        mimeType: { type: 'string', description: 'Optional MIME type override' },
+        contentBase64: { type: 'string', description: 'Base64 payload for binary files' },
+        asBase64: {
+          type: 'boolean',
+          description: 'Return base64 payload for get action instead of parsed text/JSON',
         },
       },
       required: ['action'],

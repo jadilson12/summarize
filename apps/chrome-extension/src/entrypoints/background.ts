@@ -7,6 +7,13 @@ import { buildDaemonRequestBody, buildSummarizeRequestBody } from '../lib/daemon
 import { createDaemonRecovery, isDaemonUnreachableError } from '../lib/daemon-recovery'
 import { loadSettings, patchSettings } from '../lib/settings'
 import { parseSseStream } from '../lib/sse'
+import {
+  deleteArtifact,
+  getArtifactRecord,
+  listArtifacts,
+  parseArtifact,
+  upsertArtifact,
+} from '../automation/artifacts-store'
 
 type PanelToBg =
   | { type: 'panel:ready' }
@@ -74,6 +81,12 @@ type NativeInputRequest = {
 }
 
 type NativeInputResponse = { ok: true } | { ok: false; error: string }
+type ArtifactsRequest = {
+  type: 'automation:artifacts'
+  requestId: string
+  action?: string
+  payload?: unknown
+}
 
 type UiState = {
   panelOpen: boolean
@@ -1367,7 +1380,7 @@ export default defineBackground(() => {
   })
 
   chrome.runtime.onMessage.addListener(
-    (raw: HoverToBg | NativeInputRequest, sender, sendResponse): boolean | undefined => {
+    (raw: HoverToBg | NativeInputRequest | ArtifactsRequest, sender, sendResponse): boolean | undefined => {
       if (!raw || typeof raw !== 'object' || typeof (raw as { type?: unknown }).type !== 'string') {
         return
       }
@@ -1390,6 +1403,98 @@ export default defineBackground(() => {
             sendResponse(result)
           } catch {
             // ignore
+          }
+        })()
+        return true
+      }
+      if (type === 'automation:artifacts') {
+        const msg = raw as ArtifactsRequest
+        void (async () => {
+          const tabId = sender.tab?.id
+          if (!tabId) {
+            try {
+              sendResponse({ ok: false, error: 'Missing sender tab' })
+            } catch {
+              // ignore
+            }
+            return
+          }
+
+          const payload = (msg.payload ?? {}) as {
+            fileName?: string
+            content?: unknown
+            mimeType?: string
+            asBase64?: boolean
+          }
+
+          try {
+            if (msg.action === 'listArtifacts') {
+              const records = await listArtifacts(tabId)
+              sendResponse({
+                ok: true,
+                result: records.map(({ fileName, mimeType, size, updatedAt }) => ({
+                  fileName,
+                  mimeType,
+                  size,
+                  updatedAt,
+                })),
+              })
+              return
+            }
+
+            if (msg.action === 'getArtifact') {
+              if (!payload.fileName) throw new Error('Missing fileName')
+              const record = await getArtifactRecord(tabId, payload.fileName)
+              if (!record) throw new Error(`Artifact not found: ${payload.fileName}`)
+              const isText =
+                record.mimeType.startsWith('text/') ||
+                record.mimeType === 'application/json' ||
+                record.fileName.endsWith('.json')
+              const value = payload.asBase64 ? record : isText ? parseArtifact(record) : record
+              sendResponse({ ok: true, result: value })
+              return
+            }
+
+            if (msg.action === 'createOrUpdateArtifact') {
+              if (!payload.fileName) throw new Error('Missing fileName')
+              const record = await upsertArtifact(tabId, {
+                fileName: payload.fileName,
+                content: payload.content,
+                mimeType: payload.mimeType,
+                contentBase64:
+                  typeof payload.content === 'object' &&
+                  payload.content &&
+                  'contentBase64' in payload.content
+                    ? (payload.content as { contentBase64?: string }).contentBase64
+                    : undefined,
+              })
+              sendResponse({
+                ok: true,
+                result: {
+                  fileName: record.fileName,
+                  mimeType: record.mimeType,
+                  size: record.size,
+                  updatedAt: record.updatedAt,
+                },
+              })
+              return
+            }
+
+            if (msg.action === 'deleteArtifact') {
+              if (!payload.fileName) throw new Error('Missing fileName')
+              const deleted = await deleteArtifact(tabId, payload.fileName)
+              sendResponse({ ok: true, result: { ok: deleted } })
+              return
+            }
+
+            throw new Error(`Unknown artifact action: ${msg.action ?? 'unknown'}`)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            try {
+              sendResponse({ ok: false, error: message })
+            } catch {
+              // ignore
+            }
           }
         })()
         return true

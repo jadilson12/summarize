@@ -126,4 +126,41 @@ describe('daemon/agent', () => {
     const context = mockCompleteSimple.mock.calls[0]?.[1] as { tools?: Tool[] }
     expect(context.tools?.some((tool) => tool.name === 'summarize')).toBe(true)
   })
+
+  it('exposes artifacts tool definitions when automation is enabled', async () => {
+    const home = makeTempHome()
+    await completeAgentResponse({
+      env: { HOME: home, OPENAI_API_KEY: 'sk-openai' },
+      pageUrl: 'https://example.com',
+      pageTitle: null,
+      pageContent: 'Hello world',
+      messages: [{ role: 'user', content: 'Hi' }],
+      modelOverride: 'openai/gpt-5-mini',
+      tools: ['artifacts'],
+      automationEnabled: true,
+    })
+
+    const context = mockCompleteSimple.mock.calls[0]?.[1] as { tools?: Tool[] }
+    expect(context.tools?.some((tool) => tool.name === 'artifacts')).toBe(true)
+  })
+
+  it('navigate tool exposes listTabs and switchToTab parameters', async () => {
+    const home = makeTempHome()
+    await completeAgentResponse({
+      env: { HOME: home, OPENAI_API_KEY: 'sk-openai' },
+      pageUrl: 'https://example.com',
+      pageTitle: null,
+      pageContent: 'Hello world',
+      messages: [{ role: 'user', content: 'Hi' }],
+      modelOverride: 'openai/gpt-5-mini',
+      tools: ['navigate'],
+      automationEnabled: true,
+    })
+
+    const context = mockCompleteSimple.mock.calls[0]?.[1] as { tools?: Tool[] }
+    const navigate = context.tools?.find((tool) => tool.name === 'navigate')
+    const properties = (navigate?.parameters as { properties?: Record<string, unknown> })?.properties
+    expect(properties && 'listTabs' in properties).toBe(true)
+    expect(properties && 'switchToTab' in properties).toBe(true)
+  })
 })

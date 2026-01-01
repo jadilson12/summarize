@@ -1934,6 +1934,38 @@ button.setup__pill.isActive {
   color: color-mix(in srgb, var(--accent) 65%, var(--text));
 }
 
+.automationNotice {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #f59e0b 12%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.automationNotice.hidden {
+  display: none;
+}
+
+.automationNotice__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.automationNotice__message {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.automationNotice__actions {
+  display: flex;
+  gap: 8px;
+}
+
 .chatMetricsSlot {
   display: none;
 }

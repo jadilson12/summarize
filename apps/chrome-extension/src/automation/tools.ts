@@ -1,5 +1,12 @@
 import type { ToolCall, ToolResultMessage } from '@mariozechner/pi-ai'
 import { parseSseEvent } from '../../../../src/shared/sse-events.js'
+import {
+  deleteArtifact,
+  getArtifactRecord,
+  listArtifacts,
+  parseArtifact,
+  upsertArtifact,
+} from './artifacts-store'
 import { loadSettings } from '../lib/settings'
 import { parseSseStream } from '../lib/sse'
 import { executeAskUserWhichElementTool } from './ask-user-which-element'
@@ -12,6 +19,7 @@ const TOOL_NAMES = [
   'repl',
   'ask_user_which_element',
   'skill',
+  'artifacts',
   'summarize',
   'debugger',
 ] as const
@@ -49,6 +57,12 @@ function buildToolResultMessage({
 async function getActiveTabUrl(): Promise<string | null> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   return tab?.url ?? null
+}
+
+async function getActiveTabId(): Promise<number> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id) throw new Error('No active tab')
+  return tab.id
 }
 
 type SummarizeToolArgs = {
@@ -205,6 +219,116 @@ async function executeSummarizeTool(args: SummarizeToolArgs): Promise<SummarizeT
   return { text, details: meta ?? undefined }
 }
 
+type ArtifactsToolArgs = {
+  action: 'list' | 'get' | 'create' | 'update' | 'delete'
+  fileName?: string
+  content?: unknown
+  mimeType?: string
+  contentBase64?: string
+  asBase64?: boolean
+}
+
+type ArtifactInfo = {
+  fileName: string
+  mimeType: string
+  size: number
+  updatedAt: string
+}
+
+function formatArtifactValue(value: unknown): string {
+  if (value == null) return 'null'
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+// Artifacts are stored per active tab session and can be created/updated from both REPL and tools.
+async function executeArtifactsTool(args: ArtifactsToolArgs): Promise<{ text: string; details?: unknown }> {
+  const tabId = await getActiveTabId()
+  const action = args.action
+
+  if (action === 'list') {
+    const records = await listArtifacts(tabId)
+    const items: ArtifactInfo[] = records.map((record) => ({
+      fileName: record.fileName,
+      mimeType: record.mimeType,
+      size: record.size,
+      updatedAt: record.updatedAt,
+    }))
+    const text =
+      items.length === 0
+        ? 'No artifacts found.'
+        : items.map((item) => `- ${item.fileName} (${item.mimeType}, ${item.size} bytes)`).join('\n')
+    return { text, details: { artifacts: items } }
+  }
+
+  if (!args.fileName) throw new Error('Missing fileName')
+
+  if (action === 'get') {
+    const record = await getArtifactRecord(tabId, args.fileName)
+    if (!record) throw new Error(`Artifact not found: ${args.fileName}`)
+    if (args.asBase64) {
+      const text = formatArtifactValue(record)
+      return { text, details: { artifact: record } }
+    }
+    const isText =
+      record.mimeType.startsWith('text/') ||
+      record.mimeType === 'application/json' ||
+      record.fileName.endsWith('.json')
+    const value = isText ? parseArtifact(record) : record
+    const text = formatArtifactValue(value)
+    return { text, details: { artifact: record } }
+  }
+
+  if (action === 'create') {
+    const existing = await getArtifactRecord(tabId, args.fileName)
+    if (existing) throw new Error(`Artifact already exists: ${args.fileName}`)
+  }
+
+  if (action === 'update') {
+    const existing = await getArtifactRecord(tabId, args.fileName)
+    if (!existing) throw new Error(`Artifact not found: ${args.fileName}`)
+  }
+
+  if (action === 'create' || action === 'update') {
+    const record = await upsertArtifact(tabId, {
+      fileName: args.fileName,
+      content: args.content,
+      mimeType: args.mimeType,
+      contentBase64: args.contentBase64,
+    })
+    return {
+      text: `Saved artifact ${record.fileName} (${record.mimeType}, ${record.size} bytes)`,
+      details: { artifact: record },
+    }
+  }
+
+  if (action === 'delete') {
+    const deleted = await deleteArtifact(tabId, args.fileName)
+    return { text: deleted ? `Deleted artifact ${args.fileName}` : `Artifact not found: ${args.fileName}` }
+  }
+
+  throw new Error(`Unknown artifacts action: ${action}`)
+}
+
+function maybeNotifyUserScriptsNotice(message: string) {
+  if (typeof window === 'undefined') return
+  if (!/user scripts|userscripts/i.test(message)) return
+  window.dispatchEvent(
+    new CustomEvent('summarize:automation-permissions', {
+      detail: {
+        title: 'User Scripts required',
+        message,
+        ctaLabel: 'Open extension details',
+        ctaAction: 'extensions',
+      },
+    })
+  )
+}
+
 async function executeDebuggerTool(args: { action?: string; code?: string }) {
   if (args.action !== 'eval') throw new Error('Unsupported debugger action')
   if (!args.code) throw new Error('Missing code')
@@ -250,12 +374,30 @@ export async function executeToolCall(toolCall: ToolCall): Promise<ToolResultMes
   try {
     if (toolCall.name === 'navigate') {
       const result = await executeNavigateTool(
-        toolCall.arguments as { url: string; newTab?: boolean }
+        toolCall.arguments as { url?: string; newTab?: boolean; listTabs?: boolean; switchToTab?: number }
       )
+      let text = ''
+      if (result.tabs) {
+        text =
+          result.tabs.length === 0
+            ? 'No open tabs.'
+            : result.tabs
+                .map((tab) => `- [${tab.id}] ${tab.title ?? 'Untitled'} (${tab.url ?? 'no url'})`)
+                .join('\n')
+      } else if (typeof result.switchedToTab === 'number') {
+        text = `Switched to tab ${result.switchedToTab}${result.finalUrl ? `: ${result.finalUrl}` : ''}`
+      } else {
+        text = `Navigated to ${result.finalUrl ?? 'unknown url'}`
+      }
+
+      if (result.skills && result.skills.length > 0) {
+        const skillLines = result.skills.map((skill) => `- ${skill.name}: ${skill.shortDescription}`)
+        text = `${text}\n\nSkills:\n${skillLines.join('\n')}`
+      }
       return buildToolResultMessage({
         toolCallId: toolCall.id,
         toolName: toolCall.name,
-        text: `Navigated to ${result.finalUrl}`,
+        text,
         isError: false,
         details: result,
       })
@@ -320,6 +462,17 @@ export async function executeToolCall(toolCall: ToolCall): Promise<ToolResultMes
       })
     }
 
+    if (toolCall.name === 'artifacts') {
+      const result = await executeArtifactsTool(toolCall.arguments as ArtifactsToolArgs)
+      return buildToolResultMessage({
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        text: result.text,
+        isError: false,
+        details: result.details,
+      })
+    }
+
     return buildToolResultMessage({
       toolCallId: toolCall.id,
       toolName: toolCall.name,
@@ -328,6 +481,9 @@ export async function executeToolCall(toolCall: ToolCall): Promise<ToolResultMes
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    if (toolCall.name === 'repl') {
+      maybeNotifyUserScriptsNotice(message)
+    }
     return buildToolResultMessage({
       toolCallId: toolCall.id,
       toolName: toolCall.name,

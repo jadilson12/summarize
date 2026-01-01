@@ -5,6 +5,7 @@ import {
   type Skill,
   saveSkill,
 } from '../../automation/skills-store'
+import { buildUserScriptsGuidance, getUserScriptsStatus } from '../../automation/userscripts'
 import { readPresetOrCustomValue, resolvePresetOrCustom } from '../../lib/combo'
 import { defaultSettings, loadSettings, patchSettings, saveSettings } from '../../lib/settings'
 import { applyTheme, type ColorMode, type ColorScheme } from '../../lib/theme'
@@ -500,19 +501,10 @@ const automationToggle = mountCheckbox(automationToggleRoot, {
   onCheckedChange: handleAutomationToggleChange,
 })
 
-async function resolveUserScriptsStatus() {
-  const hasPermission = await chrome.permissions?.contains?.({
-    permissions: ['userScripts'],
-  })
-  const apiAvailable = Boolean(chrome.userScripts)
-  return {
-    hasPermission: Boolean(hasPermission),
-    apiAvailable,
-  }
-}
-
 async function updateAutomationPermissionsUi() {
-  const { hasPermission, apiAvailable } = await resolveUserScriptsStatus()
+  const status = await getUserScriptsStatus()
+  const hasPermission = status.permissionGranted
+  const apiAvailable = status.apiAvailable
 
   automationPermissionsBtn.disabled = !chrome.permissions || (hasPermission && apiAvailable)
   automationPermissionsBtn.textContent = hasPermission
@@ -524,17 +516,12 @@ async function updateAutomationPermissionsUi() {
     return
   }
 
-  if (apiAvailable) {
+  if (apiAvailable && hasPermission) {
     userScriptsNoticeEl.hidden = true
     return
   }
 
-  const steps = [
-    'User Scripts API is not available.',
-    hasPermission ? null : 'First click “Enable automation permissions”.',
-    'Then open chrome://extensions, select Summarize, enable “Allow User Scripts”, and reload the tab.',
-    'Requires Chrome 120+.',
-  ].filter(Boolean)
+  const steps = [buildUserScriptsGuidance(status)].filter(Boolean)
 
   userScriptsNoticeEl.textContent = steps.join(' ')
   userScriptsNoticeEl.hidden = false
