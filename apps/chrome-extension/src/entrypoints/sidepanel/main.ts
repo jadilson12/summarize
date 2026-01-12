@@ -2248,15 +2248,20 @@ async function runAgentLoop() {
         },
       })
     } catch (error) {
+      chatController.removeMessage(streamingMessage.id)
       if (abortAgentRequested) return
       throw error
     }
     if (!response.ok || !response.assistant) {
+      chatController.removeMessage(streamingMessage.id)
       throw new Error(response.error || 'Agent failed')
     }
 
     const assistant = { ...response.assistant, id: streamingMessage.id }
-    if (abortAgentRequested) return
+    if (abortAgentRequested) {
+      chatController.removeMessage(streamingMessage.id)
+      return
+    }
     chatController.replaceMessage(assistant)
     chatController.finishStreamingMessage()
     scrollToBottom(true)

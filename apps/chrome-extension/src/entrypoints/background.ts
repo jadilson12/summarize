@@ -1280,7 +1280,7 @@ export default defineBackground(() => {
           sendStatus(session, 'Sending to AI…')
 
           try {
-            const res = await fetch('http://127.0.0.1:8787/v1/agent/stream', {
+            const res = await fetch('http://127.0.0.1:8787/v1/agent', {
               method: 'POST',
               headers: {
                 Authorization: `Bearer ${settings.token.trim()}`,
@@ -1305,7 +1305,7 @@ export default defineBackground(() => {
               const isMissingAgent =
                 res.status === 404 || rawText.trim().toLowerCase() === 'not found'
               const error = isMissingAgent
-                ? 'Daemon does not support /v1/agent/stream. Restart the daemon after updating (summarize daemon restart).'
+                ? 'Daemon does not support /v1/agent. Restart the daemon after updating (summarize daemon restart).'
                 : rawText.trim() || `${res.status} ${res.statusText}`
               throw new Error(error)
             }
@@ -1407,8 +1407,7 @@ export default defineBackground(() => {
             return
           }
 
-          const summaryText =
-            typeof payload.summary === 'string' ? payload.summary.trim() : ''
+          const summaryText = typeof payload.summary === 'string' ? payload.summary.trim() : ''
           const pageContent = buildChatPageContent({
             transcript: cachedExtract.transcriptTimedText ?? cachedExtract.text,
             summary: summaryText,

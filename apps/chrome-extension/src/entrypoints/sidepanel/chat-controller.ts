@@ -111,6 +111,16 @@ export class ChatController {
     this.updateContextStatus()
   }
 
+  removeMessage(id: string) {
+    const index = this.messages.findIndex((item) => item.id === id)
+    if (index === -1) return
+    this.messages.splice(index, 1)
+    const existing = this.messagesEl.querySelector(`[data-id="${id}"]`)
+    existing?.remove()
+    this.updateVisibility()
+    this.updateContextStatus()
+  }
+
   updateStreamingMessage(content: string) {
     const lastMsg = this.messages[this.messages.length - 1]
     if (lastMsg?.role === 'assistant') {

@@ -546,62 +546,6 @@ async function resolveAgentModel({
   throw new Error('No model available for agent')
 }
 
-export async function completeAgentResponse({
-  env,
-  pageUrl,
-  pageTitle,
-  pageContent,
-  messages,
-  modelOverride,
-  tools,
-  automationEnabled,
-}: {
-  env: Record<string, string | undefined>
-  pageUrl: string
-  pageTitle: string | null
-  pageContent: string
-  messages: unknown
-  modelOverride: string | null
-  tools: string[]
-  automationEnabled: boolean
-}): Promise<AssistantMessage> {
-  const normalizedMessages = normalizeMessages(messages)
-  const toolList = automationEnabled
-    ? tools
-        .map((toolName) => TOOL_DEFINITIONS[toolName])
-        .filter((tool): tool is Tool => Boolean(tool))
-    : []
-
-  const systemPrompt = buildSystemPrompt({
-    pageUrl,
-    pageTitle,
-    pageContent,
-    automationEnabled,
-  })
-
-  const { model, maxOutputTokens, apiKeys } = await resolveAgentModel({
-    env,
-    pageContent,
-    modelOverride,
-  })
-  const apiKey = resolveApiKeyForModel({ model, apiKeys })
-
-  const assistant = await completeSimple(
-    model,
-    {
-      systemPrompt,
-      messages: normalizedMessages,
-      tools: toolList,
-    },
-    {
-      maxTokens: maxOutputTokens,
-      apiKey,
-    }
-  )
-
-  return assistant
-}
-
 export async function streamAgentResponse({
   env,
   pageUrl,
@@ -684,4 +628,60 @@ export async function streamAgentResponse({
   }
 
   onAssistant(assistant)
+}
+
+export async function completeAgentResponse({
+  env,
+  pageUrl,
+  pageTitle,
+  pageContent,
+  messages,
+  modelOverride,
+  tools,
+  automationEnabled,
+}: {
+  env: Record<string, string | undefined>
+  pageUrl: string
+  pageTitle: string | null
+  pageContent: string
+  messages: unknown
+  modelOverride: string | null
+  tools: string[]
+  automationEnabled: boolean
+}): Promise<AssistantMessage> {
+  const normalizedMessages = normalizeMessages(messages)
+  const toolList = automationEnabled
+    ? tools
+        .map((toolName) => TOOL_DEFINITIONS[toolName])
+        .filter((tool): tool is Tool => Boolean(tool))
+    : []
+
+  const systemPrompt = buildSystemPrompt({
+    pageUrl,
+    pageTitle,
+    pageContent,
+    automationEnabled,
+  })
+
+  const { model, maxOutputTokens, apiKeys } = await resolveAgentModel({
+    env,
+    pageContent,
+    modelOverride,
+  })
+  const apiKey = resolveApiKeyForModel({ model, apiKeys })
+
+  const assistant = await completeSimple(
+    model,
+    {
+      systemPrompt,
+      messages: normalizedMessages,
+      tools: toolList,
+    },
+    {
+      maxTokens: maxOutputTokens,
+      apiKey,
+    }
+  )
+
+  return assistant
 }
