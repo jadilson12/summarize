@@ -227,6 +227,8 @@ async function downloadAudio(
   return new Promise((resolve, reject) => {
     const progressTemplate =
       'progress:%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s'
+    // Add --enable-file-urls flag for local file:// URLs
+    const isFileUrl = url.startsWith('file://')
     const args = [
       '-x',
       '--audio-format',
@@ -235,6 +237,7 @@ async function downloadAudio(
       '--retries',
       '3',
       '--no-warnings',
+      ...(isFileUrl ? ['--enable-file-urls'] : []),
       ...(onProgress ? ['--progress', '--newline', '--progress-template', progressTemplate] : []),
       ...(extraArgs?.length ? extraArgs : []),
       '-o',

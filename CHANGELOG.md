@@ -10,6 +10,7 @@
 - Chrome Side Panel chat: stream agent replies over SSE and restore chat history from daemon cache (#33, thanks @dougvk).
 - Chrome automation: add artifacts tool + REPL helpers for persistent session files (notes/JSON/CSV) and downloads.
 - Chrome automation: expand navigate tool with list/switch tab support and return matching skills after navigation.
+- CLI: transcribe local audio/video files with mtime-aware transcript cache invalidation (thanks @mvance!).
 - Browser extension: add Firefox sidebar build + multi-browser config (#31, thanks @vlnd0).
 
 ### Fixes
