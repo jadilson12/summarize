@@ -18,29 +18,28 @@ Fast summaries from URLs, files, and media. Works in the terminal, a Chrome Side
 
 One-click summarizer for the current tab. Chrome Side Panel + Firefox Sidebar + local daemon for streaming Markdown.
 
+**Get the Chrome extension (recommended):**
+
+- **Chrome Web Store:** [Summarize Side Panel](https://chromewebstore.google.com/detail/summarize/cejgnmmhbbpdmjnfppjdfkocebngehfg)
+
 YouTube slide screenshots (from the browser):
 
 ![Summarize YouTube slide screenshots](docs/assets/youtube-slides.png)
 
-Quickstart:
+### Beginner quickstart (extension)
 
-1) Install summarize (CLI + daemon):
-   - `npm i -g @steipete/summarize`
-   - `brew install steipete/tap/summarize` (macOS arm64)
-2) Build + load the extension (unpacked):
-   - Chrome: `pnpm -C apps/chrome-extension build`
-     - `chrome://extensions` → Developer mode → Load unpacked
-     - Pick: `apps/chrome-extension/.output/chrome-mv3`
-   - Firefox: `pnpm -C apps/chrome-extension build:firefox`
-     - `about:debugging#/runtime/this-firefox` → Load Temporary Add-on
-     - Pick: `apps/chrome-extension/.output/firefox-mv3/manifest.json`
-3) Open the Side Panel (Chrome) or Sidebar (Firefox) -> it shows a token + install command.
-4) Run the install command in Terminal:
-   - Installed binary: `summarize daemon install --token <TOKEN>`
-   - Repo/dev checkout: `pnpm summarize daemon install --token <TOKEN> --dev`
-5) Verify / debug:
-   - `summarize daemon status`
-   - `summarize daemon restart`
+1) Install the CLI (choose one):
+   - **npm** (cross‑platform): `npm i -g @steipete/summarize`
+   - **Homebrew** (macOS arm64): `brew install steipete/tap/summarize`
+2) Install the extension (Chrome Web Store link above) and open the Side Panel.
+3) The panel shows a token + install command. Run it in Terminal:
+   - `summarize daemon install --token <TOKEN>`
+
+Why a daemon/service?
+- The extension can’t run heavy extraction inside the browser. It talks to a local background service on `127.0.0.1` for fast streaming and media tools (yt‑dlp, ffmpeg, OCR, transcription).
+- The service autostarts (launchd/systemd/Scheduled Task) so the Side Panel is always ready.
+
+If you only want the **CLI**, you can skip the daemon install entirely.
 
 Notes:
 
@@ -55,6 +54,19 @@ More:
 - Step-by-step install: [apps/chrome-extension/README.md](apps/chrome-extension/README.md)
 - Architecture + troubleshooting: [docs/chrome-extension.md](docs/chrome-extension.md)
 - Firefox compatibility notes: [apps/chrome-extension/docs/firefox.md](apps/chrome-extension/docs/firefox.md)
+
+### Advanced (unpacked / dev)
+
+1) Build + load the extension (unpacked):
+   - Chrome: `pnpm -C apps/chrome-extension build`
+     - `chrome://extensions` → Developer mode → Load unpacked
+     - Pick: `apps/chrome-extension/.output/chrome-mv3`
+   - Firefox: `pnpm -C apps/chrome-extension build:firefox`
+     - `about:debugging#/runtime/this-firefox` → Load Temporary Add-on
+     - Pick: `apps/chrome-extension/.output/firefox-mv3/manifest.json`
+2) Open Side Panel/Sidebar → copy token.
+3) Install daemon in dev mode:
+   - `pnpm summarize daemon install --token <TOKEN> --dev`
 
 ## CLI
 
@@ -93,6 +105,11 @@ brew install steipete/tap/summarize
 ```
 
 Apple Silicon only (arm64).
+
+### CLI vs extension
+
+- **CLI only:** just install via npm/Homebrew and run `summarize ...` (no daemon needed).
+- **Chrome/Firefox extension:** install the CLI **and** run `summarize daemon install --token <TOKEN>` so the Side Panel can stream results and use local tools.
 
 ### Quickstart
 

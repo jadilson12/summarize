@@ -12,6 +12,10 @@
 - Chrome Side Panel chat: keep auto-scroll pinned while streaming when you’re already at the bottom.
 - Daemon: emit slides start/progress/done metadata in extended logging for easier debugging.
 
+### Docs
+
+- README: beginner-friendly install flow, clearer daemon rationale, and prominent Chrome Web Store link.
+
 ## 0.10.0 - 2026-01-12
 
 ### Features
