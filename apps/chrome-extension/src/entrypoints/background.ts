@@ -1680,8 +1680,70 @@ export default defineBackground(() => {
             logSlides('context:error', { reason: 'no-tab' })
             return
           }
-          const cached = getCachedExtract(tab.id, tab.url ?? null)
-          const transcriptTimedText = cached?.transcriptTimedText ?? null
+          let cached = getCachedExtract(tab.id, tab.url ?? null)
+          let transcriptTimedText = cached?.transcriptTimedText ?? null
+          if (!transcriptTimedText && settings.token.trim()) {
+            try {
+              const res = await fetch('http://127.0.0.1:8787/v1/summarize', {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${settings.token.trim()}`,
+                  'content-type': 'application/json',
+                },
+                body: JSON.stringify({
+                  url: tab.url,
+                  mode: 'url',
+                  extractOnly: true,
+                  timestamps: true,
+                  maxCharacters: null,
+                }),
+              })
+              const json = (await res.json()) as {
+                ok?: boolean
+                extracted?: { transcriptTimedText?: string | null } | null
+                error?: string
+              }
+              if (!res.ok || !json?.ok) {
+                throw new Error(json?.error || `${res.status} ${res.statusText}`)
+              }
+              transcriptTimedText = json.extracted?.transcriptTimedText ?? null
+              if (transcriptTimedText) {
+                if (!cached) {
+                  cached = {
+                    url: tab.url,
+                    title: tab.title?.trim() ?? null,
+                    text: '',
+                    source: 'url',
+                    truncated: false,
+                    totalCharacters: 0,
+                    wordCount: null,
+                    media: null,
+                    transcriptSource: null,
+                    transcriptionProvider: null,
+                    transcriptCharacters: null,
+                    transcriptWordCount: null,
+                    transcriptLines: null,
+                    transcriptTimedText,
+                    mediaDurationSeconds: null,
+                    slides: null,
+                    diagnostics: null,
+                  }
+                } else {
+                  cached = { ...cached, transcriptTimedText }
+                }
+                cachedExtracts.set(tab.id, cached)
+              }
+              logSlides('context:fetch-transcript', {
+                ok: Boolean(transcriptTimedText),
+                url: tab.url,
+              })
+            } catch (err) {
+              logSlides('context:fetch-error', {
+                url: tab.url,
+                error: err instanceof Error ? err.message : String(err),
+              })
+            }
+          }
           void send(session, {
             type: 'slides:context',
             requestId,
