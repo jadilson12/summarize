@@ -337,6 +337,7 @@ export async function runUrlFlow({
       slidesResult = await extractSlidesForSource({
         source,
         settings: flags.slides,
+        noCache: cacheState.mode === 'bypass',
         env: io.env,
         timeoutMs: flags.timeoutMs,
         ytDlpPath: model.apiStatus.ytDlpPath,

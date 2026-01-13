@@ -92,6 +92,7 @@ function resolveToolPath(
 type ExtractSlidesArgs = {
   source: SlideSource
   settings: SlideSettings
+  noCache?: boolean
   env: Record<string, string | undefined>
   timeoutMs: number
   ytDlpPath: string | null
@@ -158,6 +159,7 @@ export function resolveSlideSource({
 export async function extractSlidesForSource({
   source,
   settings,
+  noCache = false,
   env,
   timeoutMs,
   ytDlpPath,
@@ -167,9 +169,11 @@ export async function extractSlidesForSource({
 }: ExtractSlidesArgs): Promise<SlideExtractionResult> {
   const slidesDir = path.join(settings.outputDir, source.sourceId)
   return withSlidesLock(slidesDir, async () => {
-    const cached = await readSlidesCacheIfValid({ slidesDir, source, settings })
-    if (cached) {
-      return cached
+    if (!noCache) {
+      const cached = await readSlidesCacheIfValid({ slidesDir, source, settings })
+      if (cached) {
+        return cached
+      }
     }
 
     const reportSlidesProgress = (() => {
