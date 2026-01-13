@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 
-import { isTwitterStatusUrl, shouldPreferUrlMode } from '@steipete/summarize-core/content/url'
+import * as urlUtils from '@steipete/summarize-core/content/url'
 
 import { buildExtractCacheKey, buildSlidesCacheKey } from '../../../cache.js'
 import { loadRemoteAsset } from '../../../content/asset.js'
@@ -222,7 +222,12 @@ export async function runUrlFlow({
         }
         return extracted
       } catch (err) {
-        if (!shouldPreferUrlMode(targetUrl) || isTwitterStatusUrl(targetUrl)) throw err
+        const preferUrlMode =
+          typeof urlUtils.shouldPreferUrlMode === 'function'
+            ? urlUtils.shouldPreferUrlMode(targetUrl)
+            : false
+        const isTwitter = urlUtils.isTwitterStatusUrl?.(targetUrl) ?? false
+        if (!preferUrlMode || isTwitter) throw err
         // Fallback: skip HTML fetch and proceed with URL-only extraction (YouTube/direct media).
         writeVerbose(
           io.stderr,
