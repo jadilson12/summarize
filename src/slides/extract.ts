@@ -71,20 +71,6 @@ function resolveSlidesYtDlpExtractFormat(env: Record<string, string | undefined>
   ).trim()
 }
 
-function resolveSlidesExtractStream(env: Record<string, string | undefined>): boolean {
-  const raw = env.SUMMARIZE_SLIDES_EXTRACT_STREAM ?? env.SLIDES_EXTRACT_STREAM
-  // Default to downloading a local video file for frame extraction.
-  // Streaming extraction via `ffmpeg -i <googlevideo url>` is fragile (throttling/403s) and can look "stuck"
-  // in the UI (no thumbnails) for long periods.
-  if (raw == null) return false
-  if (typeof raw === 'boolean') return raw
-  const normalized = String(raw).trim().toLowerCase()
-  if (!normalized) return false
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
-  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
-  return false
-}
-
 function resolveToolPath(
   binary: string,
   env: Record<string, string | undefined>,
@@ -253,23 +239,10 @@ export async function extractSlidesForSource({
           throw new Error('Slides for YouTube require yt-dlp (set YT_DLP_PATH or install yt-dlp).')
         }
         const ytDlp = ytDlpPath
-        const format = resolveSlidesYtDlpDetectFormat(env)
-        reportSlidesProgress?.('fetching video', P_FETCH_VIDEO)
-        const streamStartedAt = Date.now()
+        const format = resolveSlidesYtDlpExtractFormat(env)
+        reportSlidesProgress?.('downloading video', P_FETCH_VIDEO)
+        const downloadStartedAt = Date.now()
         try {
-          const streamUrl = await resolveYoutubeStreamUrl({
-            ytDlpPath: ytDlp,
-            url: source.url,
-            format,
-            timeoutMs,
-          })
-          detectionInputPath = streamUrl
-          detectionUsesStream = true
-          logSlidesTiming(`yt-dlp stream url (detect, format=${format})`, streamStartedAt)
-        } catch (error) {
-          warnings.push(`Failed to resolve detection stream URL: ${String(error)}`)
-          reportSlidesProgress?.('downloading video', P_FETCH_VIDEO)
-          const downloadStartedAt = Date.now()
           const downloaded = await downloadYoutubeVideo({
             ytDlpPath: ytDlp,
             url: source.url,
@@ -283,7 +256,21 @@ export async function extractSlidesForSource({
           })
           detectionInputPath = downloaded.filePath
           detectionCleanup = downloaded.cleanup
-          logSlidesTiming(`yt-dlp download (detect, format=${format})`, downloadStartedAt)
+          detectionUsesStream = false
+          logSlidesTiming(`yt-dlp download (detect+extract, format=${format})`, downloadStartedAt)
+        } catch (error) {
+          warnings.push(`Failed to download video; falling back to stream URL: ${String(error)}`)
+          reportSlidesProgress?.('fetching video', P_FETCH_VIDEO)
+          const streamStartedAt = Date.now()
+          const streamUrl = await resolveYoutubeStreamUrl({
+            ytDlpPath: ytDlp,
+            url: source.url,
+            format,
+            timeoutMs,
+          })
+          detectionInputPath = streamUrl
+          detectionUsesStream = true
+          logSlidesTiming(`yt-dlp stream url (detect+extract, format=${format})`, streamStartedAt)
         }
       }
 
@@ -386,57 +373,8 @@ export async function extractSlidesForSource({
 
         let extractionInputPath = detectionInputPath
         let extractionUsesStream = detectionUsesStream
-        if (source.kind === 'youtube') {
-          if (!ytDlpPath) {
-            throw new Error(
-              'Slides for YouTube require yt-dlp (set YT_DLP_PATH or install yt-dlp).'
-            )
-          }
-          const extractionFormat = resolveSlidesYtDlpExtractFormat(env)
-          const detectionFormat = resolveSlidesYtDlpDetectFormat(env)
-          if (resolveSlidesExtractStream(env)) {
-            reportSlidesProgress?.('fetching video', P_DETECT_SCENES)
-            const streamStartedAt = Date.now()
-            try {
-              const streamUrl = await resolveYoutubeStreamUrl({
-                ytDlpPath,
-                url: source.url,
-                format: extractionFormat,
-                timeoutMs,
-              })
-              extractionInputPath = streamUrl
-              extractionUsesStream = true
-              logSlidesTiming(
-                `yt-dlp stream url (extract, format=${extractionFormat})`,
-                streamStartedAt
-              )
-            } catch (error) {
-              warnings.push(`Failed to resolve stream URL: ${String(error)}`)
-            }
-          }
-
-          if (extractionInputPath === detectionInputPath && extractionFormat !== detectionFormat) {
-            reportSlidesProgress?.('downloading video', P_DETECT_SCENES)
-            const extractDownloadStartedAt = Date.now()
-            const extracted = await downloadYoutubeVideo({
-              ytDlpPath,
-              url: source.url,
-              timeoutMs,
-              format: extractionFormat,
-              onProgress: (percent, detail) => {
-                const ratio = clamp(percent / 100, 0, 1)
-                const mapped = P_DETECT_SCENES + ratio * (P_EXTRACT_DOWNLOAD - P_DETECT_SCENES)
-                reportSlidesProgress?.('downloading video', mapped, detail)
-              },
-            })
-            extractionInputPath = extracted.filePath
-            extractionCleanup = extracted.cleanup
-            extractionUsesStream = false
-            logSlidesTiming(
-              `yt-dlp download (extract, format=${extractionFormat})`,
-              extractDownloadStartedAt
-            )
-          }
+        if (source.kind === 'youtube' && !ytDlpPath) {
+          throw new Error('Slides for YouTube require yt-dlp (set YT_DLP_PATH or install yt-dlp).')
         }
 
         const interval = buildIntervalTimestamps({
@@ -452,6 +390,7 @@ export async function extractSlidesForSource({
         if (combined.length === 0) {
           throw new Error('No slides detected; try adjusting slide extraction settings.')
         }
+        const sceneSegments = buildSceneSegments(detection.timestamps, detection.durationSeconds)
         const selected = interval?.timestamps.length
           ? selectTimestampTargets({
               targets: interval.timestamps,
@@ -462,7 +401,11 @@ export async function extractSlidesForSource({
           : combined
         const spaced = filterTimestampsByMinDuration(selected, settings.minDurationSeconds)
         const trimmed = applyMaxSlidesFilter(
-          spaced.map((timestamp, index) => ({ index: index + 1, timestamp, imagePath: '' })),
+          spaced.map((timestamp, index) => {
+            const segment = findSceneSegment(sceneSegments, timestamp)
+            const adjusted = adjustTimestampWithinSegment(timestamp, segment)
+            return { index: index + 1, timestamp: adjusted, imagePath: '', segment }
+          }),
           settings.maxSlides,
           warnings
         )
@@ -477,7 +420,8 @@ export async function extractSlidesForSource({
             ocrAvailable,
           }
           for (const slide of trimmed) {
-            hooks.onSlideChunk({ slide: { ...slide, imagePath: '' }, meta })
+            const { segment: _segment, ...payload } = slide
+            hooks.onSlideChunk({ slide: { ...payload, imagePath: '' }, meta })
           }
         }
 
@@ -500,6 +444,7 @@ export async function extractSlidesForSource({
             inputPath: extractionInputPath,
             outputDir: slidesDir,
             timestamps: trimmed.map((slide) => slide.timestamp),
+            segments: trimmed.map((slide) => slide.segment ?? null),
             durationSeconds: detection.durationSeconds,
             timeoutMs,
             workers,
@@ -901,6 +846,7 @@ async function extractFramesAtTimestamps({
   inputPath,
   outputDir,
   timestamps,
+  segments,
   durationSeconds,
   timeoutMs,
   workers,
@@ -912,6 +858,7 @@ async function extractFramesAtTimestamps({
   inputPath: string
   outputDir: string
   timestamps: number[]
+  segments?: Array<{ start: number; end: number | null } | null>
   durationSeconds?: number | null
   timeoutMs: number
   workers: number
@@ -933,6 +880,22 @@ async function extractFramesAtTimestamps({
         ? Math.max(0, durationSeconds - 0.1)
         : Number.POSITIVE_INFINITY
     return clamp(value, 0, upper)
+  }
+
+  const resolveSegmentBounds = (segment: { start: number; end: number | null } | null) => {
+    if (!segment) return null
+    const start = Math.max(0, segment.start)
+    const end =
+      typeof segment.end === 'number' && Number.isFinite(segment.end) ? segment.end : null
+    if (end != null && end <= start) return null
+    return { start, end }
+  }
+
+  const resolveSegmentPadding = (segment: { start: number; end: number | null } | null) => {
+    if (!segment || segment.end == null) return 0
+    const duration = Math.max(0, segment.end - segment.start)
+    if (duration <= 0) return 0
+    return Math.min(1.5, Math.max(0.2, duration * 0.08))
   }
 
   const parseSignalstats = (line: string, stats: FrameStats): void => {
@@ -963,8 +926,9 @@ async function extractFramesAtTimestamps({
     timestamp: number,
     outputPath: string,
     opts?: { timeoutMs?: number }
-  ): Promise<{ slide: SlideImage; quality: FrameQuality | null }> => {
+  ): Promise<{ slide: SlideImage; quality: FrameQuality | null; actualTimestamp: number | null }> => {
     const stats: FrameStats = { ymin: null, ymax: null, yavg: null }
+    let actualTimestamp: number | null = null
     const effectiveTimeoutMs =
       typeof opts?.timeoutMs === 'number' && Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0
         ? opts.timeoutMs
@@ -976,7 +940,7 @@ async function extractFramesAtTimestamps({
       '-i',
       inputPath,
       '-vf',
-      'signalstats,metadata=print',
+      'signalstats,showinfo,metadata=print',
       '-vframes',
       '1',
       '-q:v',
@@ -991,6 +955,10 @@ async function extractFramesAtTimestamps({
       timeoutMs: effectiveTimeoutMs,
       errorLabel: 'ffmpeg',
       onStderrLine: (line) => {
+        if (actualTimestamp == null) {
+          const parsed = parseShowinfoTimestamp(line)
+          if (parsed != null) actualTimestamp = parsed
+        }
         parseSignalstats(line, stats)
       },
     })
@@ -999,23 +967,48 @@ async function extractFramesAtTimestamps({
       throw new Error(`ffmpeg produced no output frame at ${outputPath}`)
     }
     const quality = toQuality(stats)
-    return { slide: { index: 0, timestamp, imagePath: outputPath }, quality }
+    return {
+      slide: { index: 0, timestamp, imagePath: outputPath },
+      quality,
+      actualTimestamp,
+    }
   }
 
   const slides: SlideImage[] = []
   const startedAt = Date.now()
   const tasks = timestamps.map((timestamp, index) => async () => {
+    const segment = segments?.[index] ?? null
+    const bounds = resolveSegmentBounds(segment)
+    const padding = resolveSegmentPadding(segment)
     const clampedTimestamp = clampTimestamp(timestamp)
+    const safeTimestamp =
+      bounds && bounds.end != null
+        ? bounds.end - padding <= bounds.start + padding
+          ? clampTimestamp(bounds.start + (bounds.end - bounds.start) * 0.5)
+          : clamp(clampedTimestamp, bounds.start + padding, bounds.end - padding)
+        : bounds
+          ? Math.max(bounds.start + padding, clampedTimestamp)
+          : clampedTimestamp
     const outputPath = path.join(outputDir, `slide_${String(index + 1).padStart(4, '0')}.png`)
-    const extracted = await extractFrame(clampedTimestamp, outputPath)
+    const extracted = await extractFrame(safeTimestamp, outputPath)
+    const resolvedTimestamp =
+      extracted.actualTimestamp != null ? extracted.actualTimestamp : safeTimestamp
+    const delta = resolvedTimestamp - safeTimestamp
+    if (Math.abs(delta) >= 0.25) {
+      logSlides(
+        `frame pts slide=${index + 1} req=${safeTimestamp.toFixed(2)}s -> ${resolvedTimestamp.toFixed(2)}s delta=${delta.toFixed(2)}s`
+      )
+    }
     const imageVersion = Date.now()
-    onSlide?.({ index: index + 1, timestamp, imagePath: outputPath, imageVersion })
+    onSlide?.({ index: index + 1, timestamp: resolvedTimestamp, imagePath: outputPath, imageVersion })
     return {
       index: index + 1,
-      timestamp,
+      timestamp: resolvedTimestamp,
+      requestedTimestamp: safeTimestamp,
       imagePath: outputPath,
       quality: extracted.quality,
       imageVersion,
+      segment: bounds,
     }
   })
   const results = await runWithConcurrency(tasks, workers, onProgress ?? undefined)
@@ -1038,11 +1031,23 @@ async function extractFramesAtTimestamps({
       (shouldPreferBrighterFirstSlide && (quality.brightness < 0.58 || quality.contrast < 0.2))
     if (!needsAdjust) continue
     fixTasks.push(async () => {
-      const baseTimestamp = clampTimestamp(frame.timestamp)
+      const bounds = resolveSegmentBounds(frame.segment ?? null)
+      const padding = resolveSegmentPadding(frame.segment ?? null)
+      const minTs = bounds
+        ? clampTimestamp(bounds.start + padding)
+        : clampTimestamp(frame.timestamp - FRAME_ADJUST_RANGE_SECONDS)
+      const maxTs =
+        bounds && bounds.end != null
+          ? clampTimestamp(bounds.end - padding)
+          : clampTimestamp(frame.timestamp + FRAME_ADJUST_RANGE_SECONDS)
+      if (maxTs <= minTs) return
+      const baseTimestamp = clamp(frame.timestamp, minTs, maxTs)
+      const maxRange = Math.min(FRAME_ADJUST_RANGE_SECONDS, maxTs - minTs)
+      if (!Number.isFinite(maxRange) || maxRange < FRAME_ADJUST_STEP_SECONDS) return
       const candidateOffsets: number[] = []
       for (
         let offset = FRAME_ADJUST_STEP_SECONDS;
-        offset <= FRAME_ADJUST_RANGE_SECONDS;
+        offset <= maxRange;
         offset += FRAME_ADJUST_STEP_SECONDS
       ) {
         candidateOffsets.push(offset, -offset)
@@ -1058,7 +1063,8 @@ async function extractFramesAtTimestamps({
       const minImproveDelta = shouldPreferBrighterFirstSlide ? 0.015 : 0.03
       for (const offsetSeconds of candidateOffsets) {
         if (offsetSeconds === 0) continue
-        const candidateTimestamp = clampTimestamp(baseTimestamp + offsetSeconds)
+        const candidateTimestamp = clamp(baseTimestamp + offsetSeconds, minTs, maxTs)
+        if (Math.abs(candidateTimestamp - baseTimestamp) < 0.01) continue
         const tempPath = path.join(
           outputDir,
           `slide_${String(frame.index).padStart(4, '0')}_alt.png`
@@ -1562,6 +1568,63 @@ function filterTimestampsByMinDuration(timestamps: number[], minDurationSeconds:
   return filtered
 }
 
+type SceneSegment = { start: number; end: number | null }
+
+function buildSceneSegments(
+  sceneTimestamps: number[],
+  durationSeconds: number | null
+): SceneSegment[] {
+  const sorted = sceneTimestamps
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .slice()
+    .sort((a, b) => a - b)
+  const deduped: number[] = []
+  for (const ts of sorted) {
+    if (deduped.length === 0 || ts - deduped[deduped.length - 1] > 0.05) {
+      deduped.push(ts)
+    }
+  }
+  const starts = [0, ...deduped]
+  const ends = [...deduped, durationSeconds]
+  const segments: SceneSegment[] = []
+  for (let i = 0; i < starts.length; i += 1) {
+    const start = starts[i]
+    const rawEnd = ends[i]
+    const end =
+      typeof rawEnd === 'number' && Number.isFinite(rawEnd) && rawEnd > start ? rawEnd : null
+    segments.push({ start, end })
+  }
+  return segments
+}
+
+function findSceneSegment(segments: SceneSegment[], timestamp: number): SceneSegment | null {
+  if (segments.length === 0) return null
+  for (const segment of segments) {
+    if (timestamp >= segment.start && (segment.end == null || timestamp < segment.end)) {
+      return segment
+    }
+  }
+  return segments[segments.length - 1] ?? null
+}
+
+function adjustTimestampWithinSegment(
+  timestamp: number,
+  segment: SceneSegment | null
+): number {
+  if (!segment) return timestamp
+  const start = Math.max(0, segment.start)
+  const end = segment.end
+  if (end == null || !Number.isFinite(end) || end <= start) {
+    return Math.max(timestamp, start)
+  }
+  const duration = Math.max(0, end - start)
+  const padding = Math.min(1.5, Math.max(0.2, duration * 0.08))
+  if (duration <= padding * 2) {
+    return start + duration * 0.5
+  }
+  return clamp(timestamp, start + padding, end - padding)
+}
+
 function selectTimestampTargets({
   targets,
   sceneTimestamps,
@@ -1740,11 +1803,11 @@ async function runProcessCaptureBuffer({
   })
 }
 
-function applyMaxSlidesFilter(
-  slides: SlideImage[],
+function applyMaxSlidesFilter<T extends { index: number; timestamp: number; imagePath: string }>(
+  slides: T[],
   maxSlides: number,
   warnings: string[]
-): SlideImage[] {
+): T[] {
   if (maxSlides <= 0 || slides.length <= maxSlides) return slides
   const kept = slides.slice(0, maxSlides)
   const removed = slides.slice(maxSlides)
