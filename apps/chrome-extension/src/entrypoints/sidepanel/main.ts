@@ -3,7 +3,7 @@ import { extractYouTubeVideoId, shouldPreferUrlMode } from '@steipete/summarize-
 import { SUMMARY_LENGTH_SPECS } from '@steipete/summarize-core/prompts'
 import MarkdownIt from 'markdown-it'
 
-import { parseSseEvent } from '../../../../../src/shared/sse-events.js'
+import { parseSseEvent, type SseSlidesData } from '../../../../../src/shared/sse-events.js'
 import { listSkills } from '../../automation/skills-store'
 import { executeToolCall, getAutomationToolNames } from '../../automation/tools'
 import { readPresetOrCustomValue } from '../../lib/combo'
@@ -18,6 +18,7 @@ import { ChatController } from './chat-controller'
 import { type ChatHistoryLimits, compactChatHistory } from './chat-state'
 import { createHeaderController } from './header-controller'
 import { mountSidepanelLengthPicker, mountSidepanelPickers, mountSummarizeControl } from './pickers'
+import { createSlidesStreamController } from './slides-stream-controller'
 import { createStreamController } from './stream-controller'
 import type { ChatMessage, PanelPhase, PanelState, RunStart, UiState } from './types'
 
@@ -294,6 +295,11 @@ function showSlideNotice(message: string) {
 function hideSlideNotice() {
   slideNoticeEl.classList.add('hidden')
   slideNoticeEl.textContent = ''
+}
+
+function stopSlidesStream() {
+  slidesStreamController.abort()
+  setSlidesBusy(false)
 }
 
 const slideImageCache = new Map<string, string>()
@@ -697,6 +703,7 @@ async function handleSummarizeControlChange(value: { mode: 'page' | 'video'; sli
   } else if (!value.slides) {
     hideSlideNotice()
     setSlidesBusy(false)
+    stopSlidesStream()
   }
   inputMode = value.mode
   inputModeOverride = value.mode
@@ -1109,6 +1116,7 @@ function resetSummaryView({ preserveChat = false }: { preserveChat?: boolean } =
   slidesTextMode = 'transcript'
   slideDescriptions = new Map()
   slideSummaryByIndex = new Map()
+  stopSlidesStream()
   refreshSummarizeControl()
   if (!preserveChat) {
     clearSlideImageCache()
@@ -1500,6 +1508,45 @@ function mergeSlidesPayload(
     ...next,
     slides: mergedSlides,
   }
+}
+
+function slidesPayloadChanged(
+  prev: NonNullable<PanelState['slides']> | null,
+  next: NonNullable<PanelState['slides']>
+): boolean {
+  if (!prev) return true
+  if (prev.sourceId !== next.sourceId) return true
+  if (prev.slides.length !== next.slides.length) return true
+  for (let i = 0; i < next.slides.length; i += 1) {
+    const current = next.slides[i]
+    const prior = prev.slides[i]
+    if (!prior || current.index !== prior.index) return true
+    if (current.timestamp !== prior.timestamp) return true
+    if (current.imageUrl !== prior.imageUrl) return true
+    if ((current.ocrText ?? null) !== (prior.ocrText ?? null)) return true
+    if ((current.ocrConfidence ?? null) !== (prior.ocrConfidence ?? null)) return true
+  }
+  if (next.ocrAvailable !== prev.ocrAvailable) return true
+  return false
+}
+
+function applySlidesPayload(data: SseSlidesData) {
+  const isSameSource = Boolean(panelState.slides && panelState.slides.sourceId === data.sourceId)
+  const merged = panelState.slides ? mergeSlidesPayload(panelState.slides, data) : data
+  if (!slidesPayloadChanged(panelState.slides, merged)) return
+  panelState.slides = merged
+  if (!isSameSource) {
+    slidesContextPending = false
+    slidesContextUrl = null
+    slidesTranscriptSegments = []
+    slidesTranscriptAvailable = false
+    void requestSlidesContext()
+  }
+  updateSlidesTextState()
+  if (panelState.summaryMarkdown) {
+    renderInlineSlides(renderMarkdownHostEl, { fallback: true })
+  }
+  renderInlineSlides(chatMessagesEl)
 }
 
 async function requestSlidesContext() {
@@ -2646,6 +2693,47 @@ async function runRefreshFree() {
   }
 }
 
+function handleSlidesStatus(text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return
+  if (!/^slides?/i.test(trimmed)) return
+  setSlidesBusy(true)
+  if (panelState.phase === 'connecting' || panelState.phase === 'streaming') return
+  headerController.setStatus(trimmed)
+}
+
+function startSlidesStream(run: RunStart) {
+  const effectiveInputMode = inputModeOverride ?? inputMode
+  if (!slidesEnabledValue || effectiveInputMode !== 'video') {
+    stopSlidesStream()
+    return
+  }
+  hideSlideNotice()
+  setSlidesBusy(true)
+  void slidesStreamController.start(run.id)
+}
+
+const slidesStreamController = createSlidesStreamController({
+  getToken: async () => (await loadSettings()).token,
+  onSlides: (data) => {
+    applySlidesPayload(data)
+  },
+  onStatus: (text) => {
+    handleSlidesStatus(text)
+  },
+  onError: (err) => {
+    const message = friendlyFetchError(err, 'Slides stream failed')
+    showSlideNotice(message)
+    return message
+  },
+  onDone: () => {
+    setSlidesBusy(false)
+    if (panelState.phase === 'idle') {
+      headerController.setStatus('')
+    }
+  },
+})
+
 const streamController = createStreamController({
   getToken: async () => (await loadSettings()).token,
   onReset: () => {
@@ -2663,7 +2751,7 @@ const streamController = createStreamController({
     headerController.setStatus(text)
     const trimmed = text.trim()
     const isSlideStatus = /^slides?/i.test(trimmed)
-    setSlidesBusy(isSlideStatus)
+    if (isSlideStatus) setSlidesBusy(true)
   },
   onBaseTitle: (text) => headerController.setBaseTitle(text),
   onBaseSubtitle: (text) => headerController.setBaseSubtitle(text),
@@ -2698,20 +2786,7 @@ const streamController = createStreamController({
     )
   },
   onSlides: (data) => {
-    const isSameSource = Boolean(panelState.slides && panelState.slides.sourceId === data.sourceId)
-    panelState.slides = panelState.slides ? mergeSlidesPayload(panelState.slides, data) : data
-    if (!isSameSource) {
-      slidesContextPending = false
-      slidesContextUrl = null
-      slidesTranscriptSegments = []
-      slidesTranscriptAvailable = false
-      void requestSlidesContext()
-    }
-    updateSlidesTextState()
-    if (panelState.summaryMarkdown) {
-      renderInlineSlides(renderMarkdownHostEl, { fallback: true })
-    }
-    renderInlineSlides(chatMessagesEl)
+    applySlidesPayload(data)
   },
   onSummaryFromCache: (value) => {
     panelState.summaryFromCache = value
@@ -3200,12 +3275,10 @@ function handleBgMessage(msg: BgToPanel) {
       return
     }
     case 'run:start': {
+      stopSlidesStream()
       setPhase('connecting')
       lastAction = 'summarize'
       window.clearTimeout(autoKickTimer)
-      if (slidesEnabledValue && mediaAvailable) {
-        setSlidesBusy(true)
-      }
       if (panelState.chatStreaming) {
         finishStreamingMessage()
       }
@@ -3220,6 +3293,7 @@ function handleBgMessage(msg: BgToPanel) {
       panelState.currentSource = { url: msg.run.url, title: msg.run.title }
       panelState.lastMeta = { inputSummary: null, model: null, modelLabel: null }
       pendingRunForPlannedSlides = msg.run
+      startSlidesStream(msg.run)
       void streamController.start(msg.run)
       return
     }
