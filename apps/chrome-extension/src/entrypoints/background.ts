@@ -116,6 +116,7 @@ type UiState = {
     chatEnabled: boolean
     automationEnabled: boolean
     slidesEnabled: boolean
+    slidesLayout: 'strip' | 'gallery'
     fontSize: number
     lineHeight: number
     model: string
@@ -913,6 +914,7 @@ export default defineBackground(() => {
         chatEnabled: settings.chatEnabled,
         automationEnabled: settings.automationEnabled,
         slidesEnabled: settings.slidesEnabled,
+        slidesLayout: settings.slidesLayout,
         fontSize: settings.fontSize,
         lineHeight: settings.lineHeight,
         model: settings.model,

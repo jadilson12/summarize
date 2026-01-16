@@ -1106,6 +1106,8 @@ formEl.addEventListener('submit', (e) => {
       hoverSummaries: hoverSummariesValue,
       chatEnabled: chatEnabledValue,
       automationEnabled: automationEnabledValue,
+      slidesEnabled: current.slidesEnabled,
+      slidesLayout: current.slidesLayout,
       summaryTimestamps: summaryTimestampsValue,
       extendedLogging: extendedLoggingValue,
       maxChars: Number(maxCharsEl.value) || defaultSettings.maxChars,

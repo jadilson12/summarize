@@ -9,7 +9,7 @@ import { executeToolCall, getAutomationToolNames } from '../../automation/tools'
 import { readPresetOrCustomValue } from '../../lib/combo'
 import { buildIdleSubtitle } from '../../lib/header'
 import { buildMetricsParts, buildMetricsTokens } from '../../lib/metrics'
-import { defaultSettings, loadSettings, patchSettings } from '../../lib/settings'
+import { defaultSettings, loadSettings, patchSettings, type SlidesLayout } from '../../lib/settings'
 import { parseSseStream } from '../../lib/sse'
 import { applyTheme } from '../../lib/theme'
 import { generateToken } from '../../lib/token'
@@ -154,6 +154,7 @@ const modelCustomEl = byId<HTMLInputElement>('modelCustom')
 const modelRefreshBtn = byId<HTMLButtonElement>('modelRefresh')
 const modelStatusEl = byId<HTMLDivElement>('modelStatus')
 const modelRowEl = byId<HTMLDivElement>('modelRow')
+const slidesLayoutEl = byId<HTMLSelectElement>('slidesLayout')
 
 const chatContainerEl = byId<HTMLElement>('chatContainer')
 const chatMessagesEl = byId<HTMLDivElement>('chatMessages')
@@ -253,6 +254,7 @@ let slidesTextToggleVisible = false
 let slidesTranscriptSegments: TranscriptSegment[] = []
 let slidesTranscriptAvailable = false
 let slidesOcrAvailable = false
+let slidesLayoutValue: SlidesLayout = defaultSettings.slidesLayout
 let slideDescriptions = new Map<number, string>()
 let slideSummaryByIndex = new Map<number, string>()
 let slidesContextRequestId = 0
@@ -707,8 +709,30 @@ function handleSlidesTextModeChange(next: SlideTextMode) {
   rebuildSlideDescriptions()
   if (panelState.summaryMarkdown) {
     renderInlineSlides(renderMarkdownHostEl, { fallback: true })
+  } else {
+    queueSlidesRender()
   }
   refreshSummarizeControl()
+}
+
+function applySlidesLayout() {
+  const isGallery = slidesLayoutValue === 'gallery'
+  renderMarkdownHostEl.classList.toggle('hidden', isGallery)
+  renderSlidesHostEl.dataset.layout = slidesLayoutValue
+  if (isGallery) {
+    clearSlideStrip(renderSlidesHostEl)
+  } else {
+    clearSlideGallery(renderSlidesHostEl)
+  }
+  renderMarkdownDisplay()
+  queueSlidesRender()
+}
+
+function setSlidesLayout(next: SlidesLayout) {
+  if (next === slidesLayoutValue) return
+  slidesLayoutValue = next
+  slidesLayoutEl.value = next
+  applySlidesLayout()
 }
 
 const summarizeControl = mountSummarizeControl(summarizeControlRoot, {
@@ -1065,6 +1089,7 @@ async function syncWithActiveTab() {
 function resetSummaryView({ preserveChat = false }: { preserveChat?: boolean } = {}) {
   renderMarkdownHostEl.innerHTML = ''
   clearSlideStrip(renderSlidesHostEl)
+  clearSlideGallery(renderSlidesHostEl)
   clearMetricsForMode('summary')
   panelState.summaryMarkdown = null
   panelState.summaryFromCache = null
@@ -1099,11 +1124,29 @@ window.addEventListener('unhandledrejection', (event) => {
   setPhase('error', { error: message })
 })
 
-function renderMarkdown(markdown: string) {
-  panelState.summaryMarkdown = markdown
-  updateSlideSummaryFromMarkdown(markdown)
+function splitSlidesMarkdown(markdown: string): { summary: string; slides: string | null } {
+  const match = markdown.match(/^###\s+Slides\b.*$/im)
+  if (!match || match.index == null) return { summary: markdown.trim(), slides: null }
+  const startAt = match.index
+  const summary = markdown.slice(0, startAt).trim()
+  const slides = markdown.slice(startAt).trim()
+  return { summary, slides: slides.length > 0 ? slides : null }
+}
+
+function selectMarkdownForLayout(markdown: string): string {
+  const trimmed = markdown.trim()
+  if (!trimmed) return ''
+  const { summary, slides } = splitSlidesMarkdown(markdown)
+  if (slidesLayoutValue === 'strip') return summary || slides || markdown
+  if (slidesLayoutValue === 'gallery') return slides || ''
+  return markdown
+}
+
+function renderMarkdownDisplay() {
+  const markdown = panelState.summaryMarkdown ?? ''
+  const displayMarkdown = selectMarkdownForLayout(markdown)
   try {
-    renderMarkdownHostEl.innerHTML = md.render(linkifyTimestamps(markdown))
+    renderMarkdownHostEl.innerHTML = md.render(linkifyTimestamps(displayMarkdown))
   } catch (err) {
     const message = err instanceof Error ? err.stack || err.message : String(err)
     headerController.setStatus(`Error: ${message}`)
@@ -1123,16 +1166,16 @@ function renderMarkdown(markdown: string) {
   renderInlineSlides(renderMarkdownHostEl, { fallback: true })
 }
 
+function renderMarkdown(markdown: string) {
+  panelState.summaryMarkdown = markdown
+  updateSlideSummaryFromMarkdown(markdown)
+  renderMarkdownDisplay()
+}
+
 function updateSlideSummaryFromMarkdown(markdown: string) {
   slideSummaryByIndex = parseSlideSummariesFromMarkdown(markdown)
   rebuildSlideDescriptions()
-  if (!panelState.slides) return
-  const existing = renderSlidesHostEl.querySelector('.slideStrip')
-  if (!existing) {
-    renderSlideStrip(renderSlidesHostEl)
-    return
-  }
-  updateSlideStripText(existing)
+  queueSlidesRender()
 }
 
 function parseSlideSummariesFromMarkdown(markdown: string): Map<number, string> {
@@ -1431,6 +1474,7 @@ function updateSlidesTextState() {
   }
   rebuildSlideDescriptions()
   refreshSummarizeControl()
+  queueSlidesRender()
 }
 
 function mergeSlidesPayload(
@@ -1465,12 +1509,37 @@ async function requestSlidesContext() {
 
 const MAX_SLIDE_STRIP = 12
 let slideStripRenderQueued = 0
+let slideGalleryRenderQueued = 0
+
+function queueSlidesRender() {
+  if (slidesLayoutValue === 'gallery') {
+    queueSlideGalleryRender()
+  } else {
+    queueSlideStripRender()
+  }
+}
 
 function queueSlideStripRender() {
+  if (slidesLayoutValue !== 'strip') {
+    clearSlideStrip(renderSlidesHostEl)
+    return
+  }
   if (slideStripRenderQueued) return
   slideStripRenderQueued = window.setTimeout(() => {
     slideStripRenderQueued = 0
     renderSlideStrip(renderSlidesHostEl)
+  }, 120)
+}
+
+function queueSlideGalleryRender() {
+  if (slidesLayoutValue !== 'gallery') {
+    clearSlideGallery(renderSlidesHostEl)
+    return
+  }
+  if (slideGalleryRenderQueued) return
+  slideGalleryRenderQueued = window.setTimeout(() => {
+    slideGalleryRenderQueued = 0
+    renderSlideGallery(renderSlidesHostEl)
   }, 120)
 }
 
@@ -1479,20 +1548,16 @@ function clearSlideStrip(container: HTMLElement) {
   if (existing) existing.remove()
 }
 
-function updateSlideStripText(strip: Element) {
-  if (!slidesExpanded) return
-  const buttons = Array.from(strip.querySelectorAll<HTMLButtonElement>('.slideStrip__item'))
-  for (const button of buttons) {
-    const idxRaw = button.dataset.slideIndex
-    const idx = idxRaw ? Number(idxRaw) : Number.NaN
-    if (!Number.isFinite(idx)) continue
-    const textEl = button.querySelector<HTMLElement>('.slideStrip__text')
-    if (!textEl) continue
-    textEl.textContent = slideDescriptions.get(idx) ?? ''
-  }
+function clearSlideGallery(container: HTMLElement) {
+  const existing = container.querySelector('.slideGallery')
+  if (existing) existing.remove()
 }
 
 function renderSlideStrip(container: HTMLElement) {
+  if (slidesLayoutValue !== 'strip') {
+    clearSlideStrip(container)
+    return
+  }
   if (!panelState.slides) return
   const allSlides = panelState.slides.slides
   const slides = slidesExpanded ? allSlides : allSlides.slice(0, MAX_SLIDE_STRIP)
@@ -1636,7 +1701,135 @@ function renderSlideStrip(container: HTMLElement) {
   }
 }
 
+function renderSlideGallery(container: HTMLElement) {
+  if (slidesLayoutValue !== 'gallery') {
+    clearSlideGallery(container)
+    return
+  }
+  if (!panelState.slides) {
+    clearSlideGallery(container)
+    return
+  }
+  const slides = panelState.slides.slides
+  if (slides.length === 0) {
+    clearSlideGallery(container)
+    return
+  }
+
+  const sourceId = panelState.slides.sourceId
+  let root = container.querySelector<HTMLDivElement>('.slideGallery')
+  if (!root || root.dataset.sourceId !== sourceId) {
+    clearSlideGallery(container)
+    root = document.createElement('div')
+    root.className = 'slideGallery'
+    root.dataset.sourceId = sourceId
+
+    const header = document.createElement('div')
+    header.className = 'slideGallery__header'
+    const title = document.createElement('div')
+    title.className = 'slideGallery__title'
+    header.appendChild(title)
+    root.appendChild(header)
+
+    const list = document.createElement('div')
+    list.className = 'slideGallery__list'
+    root.appendChild(list)
+
+    container.prepend(root)
+  }
+
+  const title = root.querySelector<HTMLDivElement>('.slideGallery__title')
+  const list = root.querySelector<HTMLDivElement>('.slideGallery__list')
+  if (!title || !list) return
+  title.textContent = `Slides (${slides.length})`
+
+  const existingItems = new Map<number, HTMLElement>()
+  for (const item of Array.from(list.querySelectorAll<HTMLElement>('.slideGallery__item'))) {
+    const idxRaw = item.dataset.slideIndex
+    const idx = idxRaw ? Number(idxRaw) : Number.NaN
+    if (!Number.isFinite(idx)) continue
+    existingItems.set(idx, item)
+  }
+
+  const wanted = new Set<number>(slides.map((slide) => slide.index))
+  for (const [idx, item] of existingItems) {
+    if (wanted.has(idx)) continue
+    item.remove()
+    existingItems.delete(idx)
+  }
+
+  for (const slide of slides) {
+    const idx = slide.index
+    let item = existingItems.get(idx)
+    if (!item) {
+      item = document.createElement('article')
+      item.className = 'slideGallery__item'
+      item.dataset.slideIndex = String(idx)
+
+      const media = document.createElement('button')
+      media.type = 'button'
+      media.className = 'slideGallery__media'
+
+      const thumb = document.createElement('div')
+      thumb.className = 'slideInline__thumb slideGallery__thumb isPlaceholder'
+      const img = document.createElement('img')
+      img.alt = `Slide ${idx}`
+      img.className = 'slideInline__thumbImage'
+      thumb.appendChild(img)
+      media.appendChild(thumb)
+
+      const body = document.createElement('div')
+      body.className = 'slideGallery__body'
+      const meta = document.createElement('div')
+      meta.className = 'slideGallery__meta'
+      const text = document.createElement('div')
+      text.className = 'slideGallery__text'
+      body.append(meta, text)
+
+      item.append(media, body)
+      list.appendChild(item)
+      existingItems.set(idx, item)
+    }
+
+    const media = item.querySelector<HTMLButtonElement>('.slideGallery__media')
+    const img = item.querySelector<HTMLImageElement>('img.slideInline__thumbImage')
+    const thumb = item.querySelector<HTMLDivElement>('.slideGallery__thumb')
+    const meta = item.querySelector<HTMLDivElement>('.slideGallery__meta')
+    const text = item.querySelector<HTMLDivElement>('.slideGallery__text')
+    if (!media || !img || !thumb || !meta || !text) continue
+
+    if (slide.imageUrl) {
+      thumb.classList.remove('isPlaceholder')
+      observeSlideImage(img, slide.imageUrl)
+    } else {
+      thumb.classList.add('isPlaceholder')
+    }
+
+    const timestamp = formatSlideTimestamp(slide.timestamp)
+    meta.textContent = timestamp ? `Slide ${idx} · ${timestamp}` : `Slide ${idx}`
+    text.textContent = slideDescriptions.get(idx) ?? ''
+
+    media.onclick = () => {
+      seekToSlideTimestamp(slide.timestamp)
+    }
+    list.appendChild(item)
+  }
+}
+
+function stripSlidePlaceholders(container: HTMLElement) {
+  const placeholders = Array.from(container.querySelectorAll('span.slideInline'))
+  for (const placeholder of placeholders) {
+    placeholder.remove()
+  }
+}
+
 function renderInlineSlides(container: HTMLElement, opts?: { fallback?: boolean }) {
+  const isSummary = container === renderMarkdownHostEl
+  if (isSummary) {
+    stripSlidePlaceholders(container)
+    if (opts?.fallback) queueSlidesRender()
+    return
+  }
   if (!panelState.slides) {
     if (opts?.fallback) clearSlideStrip(renderSlidesHostEl)
     return
@@ -1676,9 +1869,7 @@ function renderInlineSlides(container: HTMLElement, opts?: { fallback?: boolean 
   }
   if (opts?.fallback) {
     if (replacedCount === 0) {
-      renderSlideStrip(renderSlidesHostEl)
-    } else {
-      clearSlideStrip(renderSlidesHostEl)
+      queueSlidesRender()
     }
   }
 }
@@ -2478,7 +2669,7 @@ const streamController = createStreamController({
     }
     if (phase === 'idle' && panelState.slides && slideSummaryByIndex.size === 0) {
       rebuildSlideDescriptions()
-      queueSlideStripRender()
+      queueSlidesRender()
     }
   },
   onRememberUrl: (url) => void send({ type: 'panel:rememberUrl', url }),
@@ -2511,7 +2702,6 @@ const streamController = createStreamController({
       void requestSlidesContext()
     }
     updateSlidesTextState()
-    queueSlideStripRender()
     if (panelState.summaryMarkdown) {
       renderInlineSlides(renderMarkdownHostEl, { fallback: true })
     }
@@ -2886,6 +3076,9 @@ function updateControls(state: UiState) {
   chatEnabledValue = state.settings.chatEnabled
   automationEnabledValue = state.settings.automationEnabled
   slidesEnabledValue = state.settings.slidesEnabled
+  if (state.settings.slidesLayout && state.settings.slidesLayout !== slidesLayoutValue) {
+    setSlidesLayout(state.settings.slidesLayout)
+  }
   if (!automationEnabledValue) hideAutomationNotice()
   if (!slidesEnabledValue) hideSlideNotice()
   applyChatEnabled()
@@ -3122,7 +3315,7 @@ function seedPlannedSlidesForRun(run: RunStart) {
     slides,
   }
   updateSlidesTextState()
-  renderSlideStrip(renderSlidesHostEl)
+  queueSlidesRender()
 }
 
 const timestampPattern = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g
@@ -3480,6 +3673,14 @@ modelCustomEl.addEventListener('keydown', (event) => {
   })()
 })
 
+slidesLayoutEl.addEventListener('change', () => {
+  const next = slidesLayoutEl.value === 'gallery' ? 'gallery' : 'strip'
+  setSlidesLayout(next)
+  void (async () => {
+    await patchSettings({ slidesLayout: next })
+  })()
+})
+
 modelPresetEl.addEventListener('focus', refreshModelsIfStale)
 modelPresetEl.addEventListener('pointerdown', refreshModelsIfStale)
 modelCustomEl.addEventListener('focus', refreshModelsIfStale)
@@ -3499,6 +3700,8 @@ void (async () => {
   autoValue = s.autoSummarize
   chatEnabledValue = s.chatEnabled
   automationEnabledValue = s.automationEnabled
+  slidesLayoutValue = s.slidesLayout
+  slidesLayoutEl.value = slidesLayoutValue
   if (!automationEnabledValue) hideAutomationNotice()
   autoToggle.update({
     id: 'sidepanel-auto',
@@ -3510,6 +3713,7 @@ void (async () => {
     },
   })
   applyChatEnabled()
+  applySlidesLayout()
   pickerSettings = {
     scheme: s.colorScheme,
     mode: s.colorMode,

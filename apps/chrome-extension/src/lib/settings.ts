@@ -14,6 +14,7 @@ export type Settings = {
   chatEnabled: boolean
   automationEnabled: boolean
   slidesEnabled: boolean
+  slidesLayout: SlidesLayout
   summaryTimestamps: boolean
   extendedLogging: boolean
   hoverPrompt: string
@@ -37,6 +38,8 @@ export type Settings = {
   colorScheme: ColorScheme
   colorMode: ColorMode
 }
+
+export type SlidesLayout = 'strip' | 'gallery'
 
 const storageKey = 'settings'
 
@@ -107,6 +110,14 @@ function normalizeRequestMode(value: unknown): string {
   if (!trimmed) return defaultSettings.requestMode
   if (trimmed === 'page' || trimmed === 'url') return trimmed
   return defaultSettings.requestMode
+}
+
+function normalizeSlidesLayout(value: unknown): SlidesLayout {
+  if (typeof value !== 'string') return defaultSettings.slidesLayout
+  const trimmed = value.trim().toLowerCase()
+  if (trimmed === 'strip' || trimmed === 'summary') return 'strip'
+  if (trimmed === 'gallery' || trimmed === 'slides') return 'gallery'
+  return defaultSettings.slidesLayout
 }
 
 function normalizeFirecrawlMode(value: unknown): string {
@@ -190,6 +201,7 @@ export const defaultSettings: Settings = {
   chatEnabled: true,
   automationEnabled: false,
   slidesEnabled: false,
+  slidesLayout: 'strip',
   summaryTimestamps: true,
   extendedLogging: false,
   hoverPrompt:
@@ -252,6 +264,7 @@ export async function loadSettings(): Promise<Settings> {
         : defaultSettings.automationEnabled,
     slidesEnabled:
       typeof raw.slidesEnabled === 'boolean' ? raw.slidesEnabled : defaultSettings.slidesEnabled,
+    slidesLayout: normalizeSlidesLayout(raw.slidesLayout),
     summaryTimestamps:
       typeof raw.summaryTimestamps === 'boolean'
         ? raw.summaryTimestamps
@@ -289,6 +302,7 @@ export async function saveSettings(settings: Settings): Promise<void> {
       promptOverride: normalizePromptOverride(settings.promptOverride),
       hoverPrompt: normalizeHoverPrompt(settings.hoverPrompt),
       requestMode: normalizeRequestMode(settings.requestMode),
+      slidesLayout: normalizeSlidesLayout(settings.slidesLayout),
       firecrawlMode: normalizeFirecrawlMode(settings.firecrawlMode),
       markdownMode: normalizeMarkdownMode(settings.markdownMode),
       preprocessMode: normalizePreprocessMode(settings.preprocessMode),

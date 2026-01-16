@@ -13,6 +13,7 @@ export type UiState = {
     chatEnabled: boolean
     automationEnabled: boolean
     slidesEnabled: boolean
+    slidesLayout: 'strip' | 'gallery'
     fontSize: number
     lineHeight: number
     model: string
