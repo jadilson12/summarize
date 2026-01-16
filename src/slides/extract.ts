@@ -1105,8 +1105,12 @@ async function extractFramesAtTimestamps({
       }
       if (selectedTimestamp !== frame.timestamp) {
         const offsetSeconds = (selectedTimestamp - frame.timestamp).toFixed(2)
+        const baseBrightness = quality.brightness.toFixed(2)
+        const baseContrast = quality.contrast.toFixed(2)
+        const bestBrightness = best.quality?.brightness?.toFixed(2) ?? baseBrightness
+        const bestContrast = best.quality?.contrast?.toFixed(2) ?? baseContrast
         logSlides(
-          `thumbnail adjust slide=${frame.index} ts=${frame.timestamp.toFixed(2)}s -> ${selectedTimestamp.toFixed(2)}s offset=${offsetSeconds}s`
+          `thumbnail adjust slide=${frame.index} ts=${frame.timestamp.toFixed(2)}s -> ${selectedTimestamp.toFixed(2)}s offset=${offsetSeconds}s base=${baseBrightness}/${baseContrast} best=${bestBrightness}/${bestContrast}`
         )
       }
       onSlide?.({
