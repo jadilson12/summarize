@@ -64,10 +64,9 @@ vi.mock('../src/slides/index.js', async () => {
 })
 
 vi.mock('../src/run/slides-render.js', async () => {
-  const actual =
-    await vi.importActual<typeof import('../src/run/slides-render.js')>(
-      '../src/run/slides-render.js'
-    )
+  const actual = await vi.importActual<typeof import('../src/run/slides-render.js')>(
+    '../src/run/slides-render.js'
+  )
   return {
     ...actual,
     renderSlidesInline: renderMocks.renderSlidesInline,

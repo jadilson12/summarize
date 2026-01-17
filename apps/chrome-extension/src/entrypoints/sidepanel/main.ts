@@ -965,7 +965,10 @@ async function syncWithActiveTab() {
 function resetSummaryView({
   preserveChat = false,
   clearRunId = true,
-}: { preserveChat?: boolean; clearRunId?: boolean } = {}) {
+}: {
+  preserveChat?: boolean
+  clearRunId?: boolean
+} = {}) {
   currentRunTabId = null
   renderEl.replaceChildren(renderSlidesHostEl, renderMarkdownHostEl)
   renderMarkdownHostEl.innerHTML = ''

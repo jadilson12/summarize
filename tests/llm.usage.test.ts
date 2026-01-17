@@ -46,9 +46,7 @@ describe('llm usage normalization', () => {
   it('normalizes Google usage payloads', () => {
     expect(normalizeGoogleUsage(null)).toBeNull()
     expect(normalizeGoogleUsage({})).toBeNull()
-    expect(
-      normalizeGoogleUsage({ promptTokenCount: 10, candidatesTokenCount: 5 })
-    ).toMatchObject({
+    expect(normalizeGoogleUsage({ promptTokenCount: 10, candidatesTokenCount: 5 })).toMatchObject({
       promptTokens: 10,
       completionTokens: 5,
       totalTokens: 15,
