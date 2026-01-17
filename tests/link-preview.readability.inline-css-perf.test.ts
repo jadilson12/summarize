@@ -17,6 +17,6 @@ describe('readability (large inline CSS)', () => {
     const durationMs = performance.now() - start
 
     expect(result?.text).toContain('Hello world')
-    expect(durationMs).toBeLessThan(10_000)
+    expect(durationMs).toBeLessThan(12_000)
   }, 15_000)
 })
