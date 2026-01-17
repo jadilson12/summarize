@@ -133,4 +133,57 @@ describe('sidepanel slides stream controller', () => {
 
     expect(errors.some((msg) => msg.includes('Timed out waiting'))).toBe(true)
   })
+
+  it('returns early when token is missing', async () => {
+    let fetched = false
+    const controller = createSlidesStreamController({
+      getToken: async () => '',
+      onSlides: () => {},
+      fetchImpl: async () => {
+        fetched = true
+        return new Response(streamFromEvents([{ event: 'done', data: {} }]), { status: 200 })
+      },
+    })
+
+    await controller.start('run-1')
+
+    expect(fetched).toBe(false)
+    expect(controller.isStreaming()).toBe(false)
+  })
+
+  it('reports errors when the server returns a non-ok response', async () => {
+    const errors: string[] = []
+    const controller = createSlidesStreamController({
+      getToken: async () => 'token',
+      onSlides: () => {},
+      onError: (err) => {
+        const message = err instanceof Error ? err.message : String(err)
+        errors.push(message)
+        return message
+      },
+      fetchImpl: async () => new Response('nope', { status: 500, statusText: 'Boom' }),
+    })
+
+    await controller.start('run-1')
+
+    expect(errors.some((msg) => msg.includes('500 Boom'))).toBe(true)
+  })
+
+  it('reports errors when the response body is missing', async () => {
+    const errors: string[] = []
+    const controller = createSlidesStreamController({
+      getToken: async () => 'token',
+      onSlides: () => {},
+      onError: (err) => {
+        const message = err instanceof Error ? err.message : String(err)
+        errors.push(message)
+        return message
+      },
+      fetchImpl: async () => new Response(null, { status: 200 }),
+    })
+
+    await controller.start('run-1')
+
+    expect(errors.some((msg) => msg.includes('Missing stream body'))).toBe(true)
+  })
 })

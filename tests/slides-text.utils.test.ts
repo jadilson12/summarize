@@ -1,0 +1,177 @@
+import { describe, expect, it } from 'vitest'
+
+import {
+  buildTimestampUrl,
+  findSlidesSectionStart,
+  formatOsc8Link,
+  formatTimestamp,
+  getTranscriptTextForSlide,
+  parseSlideSummariesFromMarkdown,
+  parseTranscriptTimedText,
+  resolveSlideTextBudget,
+  resolveSlideWindowSeconds,
+  splitSummaryFromSlides,
+} from '../src/run/flows/url/slides-text.js'
+
+describe('slides text helpers', () => {
+  it('finds the earliest slides marker', () => {
+    const markdown = ['# Title', '', '[slide:2] Second', '', '### Slides', '[slide:1] First'].join(
+      '\n'
+    )
+    expect(findSlidesSectionStart(markdown)).toBe(markdown.indexOf('[slide:2]'))
+  })
+
+  it('returns null when no slides section exists', () => {
+    expect(findSlidesSectionStart('Just text.')).toBeNull()
+  })
+
+  it('splits summary from slides section', () => {
+    const markdown = ['Intro line', '', '### Slides', '[slide:1] Hello'].join('\n')
+    expect(splitSummaryFromSlides(markdown)).toEqual({
+      summary: 'Intro line',
+      slidesSection: '### Slides\n[slide:1] Hello',
+    })
+    expect(splitSummaryFromSlides('Only summary').slidesSection).toBeNull()
+  })
+
+  it('parses slide summaries and ignores invalid entries', () => {
+    const markdown = [
+      '### Slides',
+      '[slide:0] ignored',
+      '[slide:1] First line',
+      'continued line',
+      '',
+      '[slide:2] Second line',
+      '',
+      '## Next',
+      'ignored content',
+    ].join('\n')
+    const result = parseSlideSummariesFromMarkdown(markdown)
+    expect(result.get(1)).toBe('First line continued line')
+    expect(result.get(2)).toBe('Second line')
+    expect(result.has(0)).toBe(false)
+  })
+
+  it('parses transcript timed text and sorts by timestamp', () => {
+    const input = [
+      '[00:10] Second',
+      'bad line',
+      '[00:05] First',
+      '[00:05] ',
+      '[00:aa] Nope',
+      '[01:02:03] Hour mark',
+    ].join('\n')
+    const segments = parseTranscriptTimedText(input)
+    expect(segments).toEqual([
+      { startSeconds: 5, text: 'First' },
+      { startSeconds: 10, text: 'Second' },
+      { startSeconds: 3723, text: 'Hour mark' },
+    ])
+  })
+
+  it('formats timestamps for minutes and hours', () => {
+    expect(formatTimestamp(65)).toBe('1:05')
+    expect(formatTimestamp(3661)).toBe('01:01:01')
+  })
+
+  it('resolves slide text budget with clamping', () => {
+    expect(
+      resolveSlideTextBudget({ lengthArg: { kind: 'preset', preset: 'short' }, slideCount: 2 })
+    ).toBe(120)
+    expect(
+      resolveSlideTextBudget({ lengthArg: { kind: 'chars', maxCharacters: 50 }, slideCount: 1 })
+    ).toBe(80)
+    expect(
+      resolveSlideTextBudget({ lengthArg: { kind: 'chars', maxCharacters: 20000 }, slideCount: 1 })
+    ).toBe(900)
+  })
+
+  it('resolves slide window seconds with clamping', () => {
+    expect(resolveSlideWindowSeconds({ lengthArg: { kind: 'preset', preset: 'xl' } })).toBe(120)
+    expect(resolveSlideWindowSeconds({ lengthArg: { kind: 'chars', maxCharacters: 200 } })).toBe(30)
+    expect(resolveSlideWindowSeconds({ lengthArg: { kind: 'chars', maxCharacters: 50000 } })).toBe(
+      180
+    )
+  })
+
+  it('builds transcript text for a slide', () => {
+    const segments = [
+      { startSeconds: 2, text: 'hello' },
+      { startSeconds: 10, text: 'world' },
+      { startSeconds: 50, text: 'later' },
+    ]
+    const text = getTranscriptTextForSlide({
+      slide: { index: 1, timestamp: 8 },
+      nextSlide: { index: 2, timestamp: 20 },
+      segments,
+      budget: 200,
+      windowSeconds: 30,
+    })
+    expect(text).toBe('hello world')
+    expect(
+      getTranscriptTextForSlide({
+        slide: { index: 1, timestamp: Number.NaN },
+        nextSlide: null,
+        segments,
+        budget: 120,
+        windowSeconds: 30,
+      })
+    ).toBe('')
+    expect(
+      getTranscriptTextForSlide({
+        slide: { index: 1, timestamp: 10 },
+        nextSlide: null,
+        segments: [],
+        budget: 120,
+        windowSeconds: 30,
+      })
+    ).toBe('')
+    expect(
+      getTranscriptTextForSlide({
+        slide: { index: 1, timestamp: 10 },
+        nextSlide: null,
+        segments,
+        budget: 120,
+        windowSeconds: -5,
+      })
+    ).toBe('')
+
+    const longSegments = [
+      { startSeconds: 1, text: 'lorem ipsum dolor sit amet' },
+      { startSeconds: 2, text: 'consectetur adipiscing elit' },
+    ]
+    const truncated = getTranscriptTextForSlide({
+      slide: { index: 1, timestamp: 1 },
+      nextSlide: null,
+      segments: longSegments,
+      budget: 20,
+      windowSeconds: 10,
+    })
+    expect(truncated.endsWith('...')).toBe(true)
+  })
+
+  it('formats OSC-8 links when enabled', () => {
+    expect(formatOsc8Link('Label', 'https://example.com', false)).toBe('Label')
+    expect(formatOsc8Link('Label', null, true)).toBe('Label')
+    expect(formatOsc8Link('Label', 'https://example.com', true)).toContain('https://example.com')
+  })
+
+  it('builds timestamp URLs for known hosts', () => {
+    const youtubeId = 'dQw4w9WgXcQ'
+    expect(buildTimestampUrl(`https://www.youtube.com/watch?v=${youtubeId}`, 12)).toBe(
+      `https://www.youtube.com/watch?v=${youtubeId}&t=12s`
+    )
+    expect(buildTimestampUrl(`https://youtu.be/${youtubeId}`, 5)).toBe(
+      `https://www.youtube.com/watch?v=${youtubeId}&t=5s`
+    )
+    expect(buildTimestampUrl('https://vimeo.com/12345', 7)).toBe('https://vimeo.com/12345#t=7s')
+    expect(buildTimestampUrl('https://loom.com/share/abc', 9)).toBe(
+      'https://loom.com/share/abc?t=9'
+    )
+    expect(buildTimestampUrl('https://dropbox.com/s/abc/file.mp4', 11)).toBe(
+      'https://dropbox.com/s/abc/file.mp4?t=11'
+    )
+    expect(buildTimestampUrl('not a url', 5)).toBeNull()
+    expect(buildTimestampUrl('https://example.com/video', 5)).toBeNull()
+  })
+})
