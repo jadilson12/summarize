@@ -9,6 +9,7 @@ import { formatBytes } from '../../../tty/format.js'
 import { startOscProgress } from '../../../tty/osc-progress.js'
 import { startSpinner } from '../../../tty/spinner.js'
 import { assertAssetMediaTypeSupported } from '../../attachments.js'
+import { ansi } from '../../terminal.js'
 import type { SummarizeAssetArgs } from './summary.js'
 
 /**
@@ -85,12 +86,16 @@ export async function handleFileInput(
     const handler =
       isTranscribable && ctx.summarizeMediaFile ? ctx.summarizeMediaFile : ctx.summarizeAsset
 
+    const dim = (value: string) => ansi('90', value, ctx.progressEnabled)
+    const accent = (value: string) => ansi('36', value, ctx.progressEnabled)
+
     if (ctx.progressEnabled) {
       const mt = loaded.attachment.mediaType
       const name = loaded.attachment.filename
       const details = sizeLabel ? `${mt}, ${sizeLabel}` : mt
       const action = isTranscribable ? 'Transcribing' : 'Summarizing'
-      spinner.setText(name ? `${action} ${name} (${details})…` : `${action} ${details}…`)
+      const meta = name ? `${name} ${dim('(')}${details}${dim(')')}` : details
+      spinner.setText(`${action} ${meta}…`)
     }
 
     await handler({
@@ -102,10 +107,9 @@ export async function handleFileInput(
         const mt = loaded.attachment.mediaType
         const name = loaded.attachment.filename
         const details = sizeLabel ? `${mt}, ${sizeLabel}` : mt
+        const meta = name ? `${name} ${dim('(')}${details}${dim(')')}` : details
         spinner.setText(
-          name
-            ? `Summarizing ${name} (${details}, model: ${modelId})…`
-            : `Summarizing ${details} (model: ${modelId})…`
+          `Summarizing ${meta} ${dim('(')}${dim('model: ')}${accent(modelId)}${dim(')')}…`
         )
       },
     })
@@ -179,14 +183,18 @@ export async function handleUrlAsset(
   isYoutubeUrl: boolean
 ): Promise<boolean> {
   return withUrlAsset(ctx, url, isYoutubeUrl, async ({ loaded, spinner }) => {
-    if (ctx.progressEnabled) spinner.setText('Summarizing…')
+    const dim = (value: string) => ansi('90', value, ctx.progressEnabled)
+    const accent = (value: string) => ansi('36', value, ctx.progressEnabled)
+    if (ctx.progressEnabled) spinner.setText(`Summarizing ${dim('file')}…`)
     await ctx.summarizeAsset({
       sourceKind: 'asset-url',
       sourceLabel: loaded.sourceLabel,
       attachment: loaded.attachment,
       onModelChosen: (modelId) => {
         if (!ctx.progressEnabled) return
-        spinner.setText(`Summarizing (model: ${modelId})…`)
+        spinner.setText(
+          `Summarizing ${dim('file')} ${dim('(')}${dim('model: ')}${accent(modelId)}${dim(')')}…`
+        )
       },
     })
   })

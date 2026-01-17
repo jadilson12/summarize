@@ -29,6 +29,7 @@ import {
   formatUSD,
 } from '../../format.js'
 import { writeVerbose } from '../../logging.js'
+import { ansi } from '../../terminal.js'
 import {
   deriveExtractionUi,
   fetchLinkContentWithBirdTip,
@@ -461,6 +462,17 @@ export async function runUrlFlow({
       }
     }
 
+    const formatSummaryProgress = (modelId?: string | null) => {
+      const dim = (value: string) => ansi('90', value, flags.verboseColor)
+      const accent = (value: string) => ansi('36', value, flags.verboseColor)
+      const sentLabel = `${dim('sent ')}${extractionUi.contentSizeLabel}${extractionUi.viaSourceLabel}`
+      const modelLabel = modelId
+        ? `${dim('model: ')}${accent(modelId)}`
+        : ''
+      const meta = modelLabel ? `${sentLabel}${dim(', ')}${modelLabel}` : sentLabel
+      return `Summarizing ${dim('(')}${meta}${dim(')')}…`
+    }
+
     const updateSummaryProgress = () => {
       if (!flags.progressEnabled) return
       websiteProgress?.stop?.()
@@ -470,7 +482,7 @@ export async function runUrlFlow({
       spinner.setText(
         flags.extractMode
           ? `Extracted (${extractionUi.contentSizeLabel}${extractionUi.viaSourceLabel})`
-          : `Summarizing (sent ${extractionUi.contentSizeLabel}${extractionUi.viaSourceLabel})…`
+          : formatSummaryProgress()
       )
     }
 
@@ -638,9 +650,7 @@ export async function runUrlFlow({
     const onModelChosen = (modelId: string) => {
       hooks.onModelChosen?.(modelId)
       if (!flags.progressEnabled) return
-      spinner.setText(
-        `Summarizing (sent ${extractionUi.contentSizeLabel}${extractionUi.viaSourceLabel}, model: ${modelId})…`
-      )
+      spinner.setText(formatSummaryProgress(modelId))
     }
 
     await summarizeExtractedUrl({
