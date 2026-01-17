@@ -158,12 +158,49 @@ function trimIntroBeforeSlides(markdown: string): string {
   return `${intro}\n\n${rest}`
 }
 
+export function buildSlideTextFallback({
+  slides,
+  transcriptTimedText,
+  lengthArg,
+}: {
+  slides: SlideTimelineEntry[]
+  transcriptTimedText: string | null | undefined
+  lengthArg: { kind: 'preset'; preset: SummaryLength } | { kind: 'chars'; maxCharacters: number }
+}): Map<number, string> {
+  const map = new Map<number, string>()
+  if (!transcriptTimedText || !transcriptTimedText.trim()) return map
+  if (slides.length === 0) return map
+  const segments = parseTranscriptTimedText(transcriptTimedText)
+  if (segments.length === 0) return map
+  const ordered = slides.slice().sort((a, b) => a.index - b.index)
+  const budget = resolveSlideTextBudget({ lengthArg, slideCount: ordered.length })
+  const windowSeconds = resolveSlideWindowSeconds({ lengthArg })
+  for (let i = 0; i < ordered.length; i += 1) {
+    const slide = ordered[i]
+    if (!slide) continue
+    const nextSlide = i + 1 < ordered.length ? (ordered[i + 1] ?? null) : null
+    const text = getTranscriptTextForSlide({
+      slide,
+      nextSlide,
+      segments,
+      budget,
+      windowSeconds,
+    })
+    if (text) map.set(slide.index, text)
+  }
+  return map
+}
+
 export function coerceSummaryWithSlides({
   markdown,
   slides,
+  transcriptTimedText,
+  lengthArg,
 }: {
   markdown: string
   slides: SlideTimelineEntry[]
+  transcriptTimedText?: string | null
+  lengthArg: { kind: 'preset'; preset: SummaryLength } | { kind: 'chars'; maxCharacters: number }
 }): string {
   if (!markdown.trim() || slides.length === 0) return markdown
   const existingMarkers = extractSlideMarkers(markdown)
@@ -183,12 +220,17 @@ export function coerceSummaryWithSlides({
   const { summary, slidesSection } = splitSummaryFromSlides(markdown)
   const intro = pickIntroParagraph(summary)
   const slideSummaries = slidesSection ? parseSlideSummariesFromMarkdown(markdown) : new Map()
+  const fallbackSummaries = buildSlideTextFallback({
+    slides: ordered,
+    transcriptTimedText,
+    lengthArg,
+  })
 
   if (slideSummaries.size > 0) {
     const parts: string[] = []
     if (intro) parts.push(intro)
     for (const slide of ordered) {
-      const text = slideSummaries.get(slide.index) ?? ''
+      const text = slideSummaries.get(slide.index) ?? fallbackSummaries.get(slide.index) ?? ''
       parts.push(text ? `[slide:${slide.index}]\n${text}` : `[slide:${slide.index}]`)
     }
     return parts.join('\n\n')
@@ -214,7 +256,9 @@ export function coerceSummaryWithSlides({
     const end = Math.round(((i + 1) * remaining.length) / total)
     const segment = remaining.slice(start, end).join('\n\n').trim()
     const slideIndex = ordered[i]?.index ?? i + 1
-    parts.push(segment ? `[slide:${slideIndex}]\n${segment}` : `[slide:${slideIndex}]`)
+    const fallback = fallbackSummaries.get(slideIndex) ?? ''
+    const text = segment || fallback
+    parts.push(text ? `[slide:${slideIndex}]\n${text}` : `[slide:${slideIndex}]`)
   }
   return parts.join('\n\n')
 }

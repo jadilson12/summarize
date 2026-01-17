@@ -82,6 +82,8 @@ describe('slides text helpers', () => {
         { index: 1, timestamp: 1 },
         { index: 2, timestamp: 2 },
       ],
+      transcriptTimedText: null,
+      lengthArg: { kind: 'preset', preset: 'short' },
     })
     expect(coerced).toContain('[slide:1]')
     expect(coerced).toContain('[slide:2]')

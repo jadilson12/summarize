@@ -28,7 +28,10 @@ import { isRichTty, markdownRenderWidth, supportsColor } from '../../terminal.js
 import type { ModelAttempt } from '../../types.js'
 import type { UrlExtractionUi } from './extract.js'
 import type { SlidesTerminalOutput } from './slides-output.js'
-import { coerceSummaryWithSlides, interleaveSlidesIntoTranscript } from './slides-text.js'
+import {
+  coerceSummaryWithSlides,
+  interleaveSlidesIntoTranscript,
+} from './slides-text.js'
 import type { UrlFlowContext } from './types.js'
 
 type SlidesResult = Awaited<
@@ -622,9 +625,9 @@ export async function summarizeExtractedUrl({
         model.summaryEngine.runSummaryAttempt({
           attempt,
           prompt: promptPayload,
-          allowStreaming: flags.streamingEnabled,
+          allowStreaming: flags.streamingEnabled && !flags.slides,
           onModelChosen: onModelChosen ?? null,
-          streamHandler: slidesOutput?.streamHandler ?? null,
+          streamHandler: flags.slides ? null : slidesOutput?.streamHandler ?? null,
         }),
     })
     summaryResult = attemptOutcome.result
@@ -828,6 +831,8 @@ export async function summarizeExtractedUrl({
                 index: slide.index,
                 timestamp: slide.timestamp,
               })),
+              transcriptTimedText: extracted.transcriptTimedText ?? null,
+              lengthArg: flags.lengthArg,
             })
           : summary
       await slidesOutput.renderFromText(summaryForSlides)
