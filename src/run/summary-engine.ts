@@ -46,6 +46,7 @@ export type SummaryEngineDeps = {
     purpose: 'summary' | 'markdown'
   }>
   clearProgressForStdout: () => void
+  restoreProgressAfterStdout?: (() => void) | null
   apiKeys: {
     xaiApiKey: string | null
     openaiApiKey: string | null
@@ -68,6 +69,11 @@ export type SummaryEngineDeps = {
     google: string | null
     xai: string | null
   }
+}
+
+export type SummaryStreamHandler = {
+  onChunk: (args: { streamed: string; prevStreamed: string; appended: string }) => void
+  onDone?: ((finalText: string) => void) | null
 }
 
 export function createSummaryEngine(deps: SummaryEngineDeps) {
@@ -128,6 +134,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
     allowStreaming,
     onModelChosen,
     cli,
+    streamHandler,
   }: {
     attempt: ModelAttempt
     prompt: Prompt
@@ -139,6 +146,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
       cwd?: string
       extraArgsByProvider?: Partial<Record<CliProvider, string[]>>
     } | null
+    streamHandler?: SummaryStreamHandler | null
   }): Promise<{
     summary: string
     summaryAlreadyPrinted: boolean
@@ -292,9 +300,11 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
     }
 
     const shouldRenderMarkdownToAnsi = !deps.plain && isRichTty(deps.stdout)
-    const shouldStreamSummaryToStdout = streamingEnabledForCall && !shouldRenderMarkdownToAnsi
+    const hasStreamHandler = Boolean(streamHandler)
+    const shouldStreamSummaryToStdout =
+      streamingEnabledForCall && !shouldRenderMarkdownToAnsi && !hasStreamHandler
     const shouldStreamRenderedMarkdownToStdout =
-      streamingEnabledForCall && shouldRenderMarkdownToAnsi
+      streamingEnabledForCall && shouldRenderMarkdownToAnsi && !hasStreamHandler
 
     let summaryAlreadyPrinted = false
     let summary = ''
@@ -399,6 +409,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
 
     if (streamResult) {
       deps.clearProgressForStdout()
+      deps.restoreProgressAfterStdout?.()
       getLastStreamError = streamResult.lastError
       let streamed = ''
       let streamedRaw = ''
@@ -422,6 +433,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         ? createStreamOutputGate({
             stdout: deps.stdout,
             clearProgressForStdout: deps.clearProgressForStdout,
+            restoreProgressAfterStdout: deps.restoreProgressAfterStdout ?? null,
             outputMode: deps.streamingOutputMode ?? 'line',
             richTty: isRichTty(deps.stdout),
           })
@@ -432,6 +444,14 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
           const prevStreamed = streamed
           const merged = mergeStreamingChunk(streamed, delta)
           streamed = merged.next
+          if (streamHandler) {
+            streamHandler.onChunk({
+              streamed: merged.next,
+              prevStreamed,
+              appended: merged.appended,
+            })
+            continue
+          }
           if (shouldStreamSummaryToStdout && outputGate) {
             outputGate.handleChunk(streamed, prevStreamed)
             continue
@@ -447,6 +467,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
               } else {
                 deps.stdout.write(out)
               }
+              deps.restoreProgressAfterStdout?.()
             }
           }
         }
@@ -455,7 +476,10 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         const trimmed = streamed.trim()
         streamed = trimmed
       } finally {
-        if (shouldStreamRenderedMarkdownToStdout) {
+        if (streamHandler) {
+          streamHandler.onDone?.(streamedRaw || streamed)
+          summaryAlreadyPrinted = true
+        } else if (shouldStreamRenderedMarkdownToStdout) {
           const out = streamer?.finish()
           if (out) {
             deps.clearProgressForStdout()
@@ -465,6 +489,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
             } else {
               deps.stdout.write(out)
             }
+            deps.restoreProgressAfterStdout?.()
           }
           summaryAlreadyPrinted = true
         }
@@ -491,6 +516,13 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         throw new Error(last.message, { cause: last })
       }
       throw new Error('LLM returned an empty summary')
+    }
+
+    if (!streamResult && streamHandler) {
+      const cleaned = summary.trim()
+      streamHandler.onChunk({ streamed: cleaned, prevStreamed: '', appended: cleaned })
+      streamHandler.onDone?.(cleaned)
+      summaryAlreadyPrinted = true
     }
 
     return {

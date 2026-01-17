@@ -89,6 +89,7 @@ export type AssetSummaryContext = {
   trackedFetch: typeof fetch
   writeViaFooter: (parts: string[]) => void
   clearProgressForStdout: () => void
+  restoreProgressAfterStdout?: (() => void) | null
   getLiteLlmCatalog: () => Promise<
     Awaited<ReturnType<typeof import('../../../pricing/litellm.js').loadLiteLlmCatalog>>['catalog']
   >
@@ -171,6 +172,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
   ) {
     ctx.clearProgressForStdout()
     ctx.stdout.write(`${textContent.content.trim()}\n`)
+    ctx.restoreProgressAfterStdout?.()
     if (assetFooterParts.length > 0) {
       ctx.writeViaFooter([...assetFooterParts, 'no model'])
     }
@@ -403,6 +405,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     if (textContent) {
       ctx.clearProgressForStdout()
       ctx.stdout.write(`${textContent.content.trim()}\n`)
+      ctx.restoreProgressAfterStdout?.()
       if (assetFooterParts.length > 0) {
         ctx.writeViaFooter([...assetFooterParts, 'no model'])
       }
@@ -494,6 +497,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
       summary,
     }
     ctx.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+    ctx.restoreProgressAfterStdout?.()
     if (ctx.metricsEnabled && finishReport) {
       const costUsd = await ctx.estimateCostUsd()
       writeFinishLine({
@@ -532,6 +536,7 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
     if (!rendered.endsWith('\n')) {
       ctx.stdout.write('\n')
     }
+    ctx.restoreProgressAfterStdout?.()
   }
 
   ctx.writeViaFooter([...assetFooterParts, `model ${usedAttempt.userModelId}`])

@@ -35,6 +35,7 @@ import {
   logExtractionDiagnostics,
 } from './extract.js'
 import { createMarkdownConverters } from './markdown.js'
+import { createSlidesTerminalOutput } from './slides-output.js'
 import { buildUrlPrompt, outputExtractedUrl, summarizeExtractedUrl } from './summary.js'
 import type { UrlFlowContext } from './types.js'
 
@@ -161,10 +162,11 @@ export async function runUrlFlow({
     spinner.stopAndClear()
     oscProgress.clear()
   }
-  const clearProgressLine = () => {
-    stopProgress()
+  const pauseProgressLine = () => {
+    spinner.pause()
+    return () => spinner.resume()
   }
-  hooks.setClearProgressBeforeStdout(clearProgressLine)
+  hooks.setClearProgressBeforeStdout(pauseProgressLine)
   try {
     const buildFetchOptions = (): FetchLinkContentOptions => ({
       timeoutMs: flags.timeoutMs,
@@ -286,6 +288,36 @@ export async function runUrlFlow({
     let slidesPlanned: SlideExtractionResult | null = null
     let slidesExtracted: SlideExtractionResult | null = null
     let slidesDone = false
+    const slidesOutputEnabled = Boolean(flags.slides) && !flags.json && !flags.extractMode
+    const slidesOutput = createSlidesTerminalOutput({
+      io,
+      flags: { plain: flags.plain, lengthArg: flags.lengthArg },
+      extracted,
+      slides: null,
+      enabled: slidesOutputEnabled,
+      outputMode: 'line',
+      clearProgressForStdout: hooks.clearProgressForStdout,
+      restoreProgressAfterStdout: hooks.restoreProgressAfterStdout ?? null,
+      onProgressText: flags.progressEnabled ? (text) => spinner.setText(text) : null,
+    })
+
+    if (slidesOutput) {
+      const existingSlidesExtracted = hooks.onSlidesExtracted
+      const existingSlidesDone = hooks.onSlidesDone
+      const existingSlideChunk = hooks.onSlideChunk
+      hooks.onSlidesExtracted = (value) => {
+        existingSlidesExtracted?.(value)
+        slidesOutput.onSlidesExtracted(value)
+      }
+      hooks.onSlidesDone = (result) => {
+        existingSlidesDone?.(result)
+        slidesOutput.onSlidesDone(result)
+      }
+      hooks.onSlideChunk = (chunk) => {
+        existingSlideChunk?.(chunk)
+        slidesOutput.onSlideChunk(chunk)
+      }
+    }
 
     const markSlidesDone = (result: { ok: boolean; error?: string | null }) => {
       if (slidesDone) return
@@ -621,9 +653,10 @@ export async function runUrlFlow({
       transcriptionCostLabel,
       onModelChosen,
       slides: slidesExtracted ?? slidesPlanned,
+      slidesOutput,
     })
   } finally {
-    hooks.clearProgressIfCurrent(clearProgressLine)
+    hooks.clearProgressIfCurrent(pauseProgressLine)
     stopProgress()
   }
 }

@@ -48,11 +48,13 @@ read_when:
 - OCR toggle appears near summarize control only when OCR is significant
   (enough slides + total OCR chars); otherwise hide it.
 
-## CLI (slides-only)
-- `summarize slides <url>` extracts slides without summarizing.
-- `summarize <url> --slides` renders inline thumbnails automatically when supported.
+## CLI
+- `summarize <url> --slides` streams a short overview paragraph, then renders each slide image followed by a timestamp link and a slide summary.
+  - Slide summaries are LLM-generated from transcript windows between slides; missing entries fall back to transcript slices.
+  - If inline images are unsupported, the CLI prints text-only output and notes how to export slides to disk.
+  - Timestamp links use OSC-8 when supported (YouTube/Vimeo/Loom/Dropbox).
+- `summarize slides <url>` extracts slides without summarizing (use `--render auto|kitty|iterm` for inline thumbnails).
 - Defaults to writing images under `./slides/<sourceId>/` (override via `--slides-dir` / `--output`).
-- Inline terminal rendering is opt-in: `--render auto|kitty|iterm` (Konsole uses the kitty protocol).
 
 ## Implementation notes
 - Build `slideDescriptions` map in panel:

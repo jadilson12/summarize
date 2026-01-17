@@ -3,11 +3,13 @@ export type StreamOutputMode = 'line' | 'delta'
 export function createStreamOutputGate({
   stdout,
   clearProgressForStdout,
+  restoreProgressAfterStdout,
   outputMode,
   richTty,
 }: {
   stdout: NodeJS.WritableStream
   clearProgressForStdout: () => void
+  restoreProgressAfterStdout?: (() => void) | null
   outputMode: StreamOutputMode
   richTty: boolean
 }) {
@@ -24,6 +26,7 @@ export function createStreamOutputGate({
   const flush = (text: string) => {
     clearProgressForStdout()
     stdout.write(text)
+    restoreProgressAfterStdout?.()
   }
 
   const handleChunk = (streamed: string, prevStreamed: string) => {
@@ -58,11 +61,19 @@ export function createStreamOutputGate({
 
   const finalize = (finalText: string) => {
     const remaining = plainFlushedLen < finalText.length ? finalText.slice(plainFlushedLen) : ''
-    if (remaining) stdout.write(remaining)
+    if (remaining) {
+      clearProgressForStdout()
+      stdout.write(remaining)
+      restoreProgressAfterStdout?.()
+    }
     const endedWithNewline = remaining
       ? remaining.endsWith('\n')
       : plainFlushedLen > 0 && finalText[plainFlushedLen - 1] === '\n'
-    if (!endedWithNewline) stdout.write('\n')
+    if (!endedWithNewline) {
+      clearProgressForStdout()
+      stdout.write('\n')
+      restoreProgressAfterStdout?.()
+    }
   }
 
   return { handleChunk, finalize, getFlushedLen: () => plainFlushedLen }

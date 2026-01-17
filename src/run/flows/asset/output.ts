@@ -36,6 +36,7 @@ export async function outputExtractedAsset({
   }
   hooks: {
     clearProgressForStdout: () => void
+    restoreProgressAfterStdout?: (() => void) | null
     buildReport: () => Promise<RunMetricsReport>
     estimateCostUsd: () => Promise<number | null>
   }
@@ -93,6 +94,7 @@ export async function outputExtractedAsset({
       summary: null,
     }
     io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+    hooks.restoreProgressAfterStdout?.()
     if (flags.metricsEnabled && finishReport) {
       const costUsd = await hooks.estimateCostUsd()
       writeFinishLine({
@@ -128,6 +130,7 @@ export async function outputExtractedAsset({
   if (!rendered.endsWith('\n')) {
     io.stdout.write('\n')
   }
+  hooks.restoreProgressAfterStdout?.()
 
   const report = flags.shouldComputeReport ? await hooks.buildReport() : null
   if (flags.metricsEnabled && report) {

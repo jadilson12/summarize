@@ -122,9 +122,12 @@ export function buildLinkSummaryPrompt({
     preset === 'xxl' ||
     (typeof effectiveSummaryLength !== 'string' &&
       effectiveSummaryLength.maxCharacters >= HEADING_LENGTH_CHAR_THRESHOLD)
-  const headingInstruction = needsHeadings
-    ? 'Use Markdown headings with the "### " prefix to break sections. Include at least 3 headings and start with a heading. Do not use bold for headings.'
-    : ''
+  const headingInstruction =
+    slides && slides.count > 0
+      ? 'Do not add headings before the Slides section; use only the "### Slides" heading.'
+      : needsHeadings
+        ? 'Use Markdown headings with the "### " prefix to break sections. Include at least 3 headings and start with a heading. Do not use bold for headings.'
+        : ''
   const maxCharactersLine =
     typeof effectiveSummaryLength === 'string'
       ? ''
@@ -180,6 +183,7 @@ export function buildLinkSummaryPrompt({
   const slideInstruction =
     slides && slides.count > 0
       ? [
+          'Start with a single short overview paragraph (2-4 sentences). Do not use headings or bullets before the Slides section.',
           'Slides are provided as transcript excerpts that correspond to time spans between adjacent slides.',
           'Include a section titled "### Slides" that summarizes the video along the timeline (what they are talking about in each segment).',
           'In that section, write short paragraphs (not bullets). Each paragraph MUST start with a [slide:N] tag (N = slide index) and then summarize the spoken content for that segment. Small timing drift is OK; do not overfit.',

@@ -124,7 +124,8 @@ export type UrlFlowHooks = {
   summarizeAsset: (args: SummarizeAssetArgs) => Promise<void>
   writeViaFooter: (parts: string[]) => void
   clearProgressForStdout: () => void
-  setClearProgressBeforeStdout: (fn: (() => void) | null) => void
+  restoreProgressAfterStdout?: (() => void) | null
+  setClearProgressBeforeStdout: (fn: (() => undefined | (() => void)) | null) => void
   clearProgressIfCurrent: (fn: () => void) => void
   buildReport: () => Promise<RunMetricsReport>
   estimateCostUsd: () => Promise<number | null>

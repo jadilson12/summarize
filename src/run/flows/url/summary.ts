@@ -27,6 +27,7 @@ import { buildOpenRouterNoAllowedProvidersMessage } from '../../openrouter.js'
 import { isRichTty, markdownRenderWidth, supportsColor } from '../../terminal.js'
 import type { ModelAttempt } from '../../types.js'
 import type { UrlExtractionUi } from './extract.js'
+import type { SlidesTerminalOutput } from './slides-output.js'
 import type { UrlFlowContext } from './types.js'
 
 type SlidesResult = Awaited<
@@ -357,6 +358,8 @@ export async function outputExtractedUrl({
       summary: null,
     }
     io.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+    hooks.restoreProgressAfterStdout?.()
+    hooks.restoreProgressAfterStdout?.()
     if (flags.metricsEnabled && finishReport) {
       const costUsd = await hooks.estimateCostUsd()
       writeFinishLine({
@@ -404,6 +407,7 @@ export async function outputExtractedUrl({
   if (!renderedExtract.endsWith('\n')) {
     io.stdout.write('\n')
   }
+  hooks.restoreProgressAfterStdout?.()
   const slideFooter = slides ? [`slides ${slides.slides.length}`] : []
   hooks.writeViaFooter([...extractionUi.footerParts, ...slideFooter])
   const report = flags.shouldComputeReport ? await hooks.buildReport() : null
@@ -437,6 +441,7 @@ export async function summarizeExtractedUrl({
   transcriptionCostLabel,
   onModelChosen,
   slides,
+  slidesOutput,
 }: {
   ctx: UrlFlowContext
   url: string
@@ -449,6 +454,7 @@ export async function summarizeExtractedUrl({
   slides?: Awaited<
     ReturnType<typeof import('../../../slides/index.js').extractSlidesForSource>
   > | null
+  slidesOutput?: SlidesTerminalOutput | null
 }) {
   const { io, flags, model, cache: cacheState, hooks } = ctx
 
@@ -606,6 +612,7 @@ export async function summarizeExtractedUrl({
           prompt: promptPayload,
           allowStreaming: flags.streamingEnabled,
           onModelChosen: onModelChosen ?? null,
+          streamHandler: slidesOutput?.streamHandler ?? null,
         }),
     })
     summaryResult = attemptOutcome.result
@@ -706,6 +713,7 @@ export async function summarizeExtractedUrl({
       return
     }
     io.stdout.write(`${extracted.content}\n`)
+    hooks.restoreProgressAfterStdout?.()
     if (extractionUi.footerParts.length > 0) {
       hooks.writeViaFooter([...extractionUi.footerParts, 'no model'])
     }
@@ -798,7 +806,13 @@ export async function summarizeExtractedUrl({
     return
   }
 
-  if (!summaryAlreadyPrinted) {
+  if (slidesOutput) {
+    if (!summaryAlreadyPrinted) {
+      slidesOutput.streamHandler.onChunk({ streamed: summary, prevStreamed: '', appended: summary })
+      slidesOutput.streamHandler.onDone?.(summary)
+    }
+    await slidesOutput.renderFromSummary(summary)
+  } else if (!summaryAlreadyPrinted) {
     hooks.clearProgressForStdout()
     const rendered =
       !flags.plain && isRichTty(io.stdout)
@@ -819,6 +833,7 @@ export async function summarizeExtractedUrl({
     if (!rendered.endsWith('\n')) {
       io.stdout.write('\n')
     }
+    hooks.restoreProgressAfterStdout?.()
   }
 
   const report = flags.shouldComputeReport ? await hooks.buildReport() : null

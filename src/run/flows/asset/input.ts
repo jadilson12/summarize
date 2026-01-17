@@ -27,7 +27,7 @@ export type AssetInputContext = {
   trackedFetch: typeof fetch
   summarizeAsset: (args: SummarizeAssetArgs) => Promise<void>
   summarizeMediaFile?: (args: SummarizeAssetArgs) => Promise<void>
-  setClearProgressBeforeStdout: (fn: (() => void) | null) => void
+  setClearProgressBeforeStdout: (fn: (() => undefined | (() => void)) | null) => void
   clearProgressIfCurrent: (fn: () => void) => void
 }
 
@@ -72,10 +72,11 @@ export async function handleFileInput(
     spinner.stopAndClear()
     stopOscProgress()
   }
-  const clearProgressLine = () => {
-    stopProgress()
+  const pauseProgressLine = () => {
+    spinner.pause()
+    return () => spinner.resume()
   }
-  ctx.setClearProgressBeforeStdout(clearProgressLine)
+  ctx.setClearProgressBeforeStdout(pauseProgressLine)
   try {
     const loaded = await loadLocalAsset({ filePath: inputTarget.filePath })
     assertAssetMediaTypeSupported({ attachment: loaded.attachment, sizeLabel })
@@ -110,7 +111,7 @@ export async function handleFileInput(
     })
     return true
   } finally {
-    ctx.clearProgressIfCurrent(clearProgressLine)
+    ctx.clearProgressIfCurrent(pauseProgressLine)
     stopProgress()
   }
 }
@@ -145,10 +146,11 @@ export async function withUrlAsset(
     spinner.stopAndClear()
     stopOscProgress()
   }
-  const clearProgressLine = () => {
-    stopProgress()
+  const pauseProgressLine = () => {
+    spinner.pause()
+    return () => spinner.resume()
   }
-  ctx.setClearProgressBeforeStdout(clearProgressLine)
+  ctx.setClearProgressBeforeStdout(pauseProgressLine)
   try {
     const loaded = await (async () => {
       try {
@@ -163,10 +165,10 @@ export async function withUrlAsset(
 
     if (!loaded) return false
     assertAssetMediaTypeSupported({ attachment: loaded.attachment, sizeLabel: null })
-    await handler({ loaded, spinner, clearProgressLine })
+    await handler({ loaded, spinner, clearProgressLine: pauseProgressLine })
     return true
   } finally {
-    ctx.clearProgressIfCurrent(clearProgressLine)
+    ctx.clearProgressIfCurrent(pauseProgressLine)
     stopProgress()
   }
 }

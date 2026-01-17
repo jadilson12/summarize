@@ -28,7 +28,7 @@ export function buildProgram() {
     )
     .option(
       '--slides',
-      'Extract slide screenshots for YouTube/direct video URLs (auto-renders inline when supported).',
+      'Extract slides for YouTube/direct video URLs and render a slide timeline with summaries (inline when supported).',
       false
     )
     .option('--slides-ocr', 'Run OCR on extracted slides (requires tesseract).', false)
@@ -204,8 +204,8 @@ ${heading('Examples')}
   ${cmd('summarize "https://example.com" --extract --format md --markdown-mode llm')} ${dim('# extracted markdown via LLM')}
   ${cmd('summarize "https://www.youtube.com/watch?v=..." --extract --format md --markdown-mode llm')} ${dim('# transcript as formatted markdown')}
   ${cmd('summarize "https://www.youtube.com/watch?v=I845O57ZSy4&t=11s" --extract --youtube web')}
-  ${cmd('summarize "https://www.youtube.com/watch?v=..." --slides')} ${dim('# extract slide screenshots')}
-  ${cmd('summarize "https://www.youtube.com/watch?v=..." --slides --slides-ocr')} ${dim('# slides + OCR text')}
+  ${cmd('summarize "https://www.youtube.com/watch?v=..." --slides')} ${dim('# summary + slide timeline')}
+  ${cmd('summarize "https://www.youtube.com/watch?v=..." --slides --slides-ocr')} ${dim('# slides + OCR extraction')}
   ${cmd('summarize slides "https://www.youtube.com/watch?v=..." --render auto')} ${dim('# slides-only mode with inline thumbnails')}
   ${cmd('summarize "https://example.com" --length 20k --max-output-tokens 2k --timeout 2m --model openai/gpt-5-mini')}
   ${cmd('summarize "https://example.com" --model mymodel')} ${dim('# config preset')}
