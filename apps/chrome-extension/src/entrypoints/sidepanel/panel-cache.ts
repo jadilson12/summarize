@@ -11,6 +11,7 @@ export type PanelCachePayload = {
   url: string
   title: string | null
   runId: string | null
+  slidesRunId: string | null
   summaryMarkdown: string | null
   summaryFromCache: boolean | null
   lastMeta: PanelCacheMeta

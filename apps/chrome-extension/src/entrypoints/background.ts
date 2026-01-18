@@ -55,6 +55,7 @@ type BgToPanel =
   | { type: 'ui:status'; status: string }
   | { type: 'run:start'; run: RunStart }
   | { type: 'run:error'; message: string }
+  | { type: 'slides:run'; ok: boolean; runId?: string; url?: string; error?: string }
   | { type: 'agent:chunk'; requestId: string; text: string }
   | { type: 'chat:history'; requestId: string; ok: boolean; messages?: Message[]; error?: string }
   | {
@@ -119,6 +120,7 @@ type UiState = {
     chatEnabled: boolean
     automationEnabled: boolean
     slidesEnabled: boolean
+    slidesParallel: boolean
     slidesLayout: 'strip' | 'gallery'
     fontSize: number
     lineHeight: number
@@ -162,6 +164,7 @@ type PanelCachePayload = {
   url: string
   title: string | null
   runId: string | null
+  slidesRunId: string | null
   summaryMarkdown: string | null
   summaryFromCache: boolean | null
   lastMeta: { inputSummary: string | null; model: string | null; modelLabel: string | null }
@@ -944,6 +947,7 @@ export default defineBackground(() => {
         chatEnabled: settings.chatEnabled,
         automationEnabled: settings.automationEnabled,
         slidesEnabled: settings.slidesEnabled,
+        slidesParallel: settings.slidesParallel,
         slidesLayout: settings.slidesLayout,
         fontSize: settings.fontSize,
         lineHeight: settings.lineHeight,
@@ -1243,6 +1247,7 @@ export default defineBackground(() => {
       (effectiveInputMode === 'video' ||
         resolvedPayload.media?.hasVideo === true ||
         shouldPreferUrlMode(resolvedPayload.url))
+    const wantsParallelSlides = wantsSlides && settings.slidesParallel
 
     const resolveSlidesForLength = (
       lengthValue: string,
@@ -1275,6 +1280,7 @@ export default defineBackground(() => {
       inputMode: effectiveInputMode ?? null,
       wantsSummaryTimestamps,
       wantsSlides,
+      wantsParallelSlides,
     })
 
     cachedExtracts.set(tab.id, {
@@ -1299,29 +1305,32 @@ export default defineBackground(() => {
 
     sendStatus(session, 'Connecting…')
     session.inflightUrl = resolvedPayload.url
+    const slideAuto = wantsSlides
+      ? resolveSlidesForLength(settings.length, resolvedPayload.mediaDurationSeconds)
+      : { maxSlides: null, minDurationSeconds: null }
+    const slidesConfig = wantsSlides
+      ? {
+          enabled: true,
+          ocr: true,
+          maxSlides: slideAuto.maxSlides,
+          minDurationSeconds: slideAuto.minDurationSeconds,
+        }
+      : { enabled: false }
+    const summarySlides = wantsParallelSlides ? { enabled: false } : slidesConfig
     let id: string
     try {
-      const slideAuto = wantsSlides
-        ? resolveSlidesForLength(settings.length, resolvedPayload.mediaDurationSeconds)
-        : { maxSlides: null, minDurationSeconds: null }
       const body = buildSummarizeRequestBody({
         extracted: resolvedPayload,
         settings,
         noCache: Boolean(opts?.refresh),
         inputMode: effectiveInputMode,
         timestamps: wantsSummaryTimestamps,
-        slides: wantsSlides
-          ? {
-              enabled: true,
-              ocr: true,
-              maxSlides: slideAuto.maxSlides,
-              minDurationSeconds: slideAuto.minDurationSeconds,
-            }
-          : { enabled: false },
+        slides: summarySlides,
       })
       logPanel('summarize:request', {
         url: resolvedPayload.url,
-        slides: wantsSlides,
+        slides: wantsSlides && !wantsParallelSlides,
+        slidesParallel: wantsParallelSlides,
         timestamps: wantsSummaryTimestamps,
       })
       const res = await fetch('http://127.0.0.1:8787/v1/summarize', {
@@ -1354,6 +1363,59 @@ export default defineBackground(() => {
       type: 'run:start',
       run: { id, url: resolvedPayload.url, title: resolvedTitle, model: settings.model, reason },
     })
+
+    if (wantsParallelSlides) {
+      void (async () => {
+        try {
+          const slidesBody = buildSummarizeRequestBody({
+            extracted: resolvedPayload,
+            settings,
+            noCache: Boolean(opts?.refresh),
+            inputMode: effectiveInputMode,
+            timestamps: wantsSummaryTimestamps,
+            slides: slidesConfig,
+          })
+          logPanel('slides:request', { url: resolvedPayload.url })
+          const res = await fetch('http://127.0.0.1:8787/v1/summarize', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${settings.token.trim()}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify(slidesBody),
+            signal: controller.signal,
+          })
+          const json = (await res.json()) as { ok: boolean; id?: string; error?: string }
+          if (!res.ok || !json.ok || !json.id) {
+            throw new Error(json.error || `${res.status} ${res.statusText}`)
+          }
+          if (controller.signal.aborted) return
+          if (
+            session.runController !== controller ||
+            (session.inflightUrl && !urlsMatch(session.inflightUrl, resolvedPayload.url))
+          ) {
+            return
+          }
+          void send(session, {
+            type: 'slides:run',
+            ok: true,
+            runId: json.id,
+            url: resolvedPayload.url,
+          })
+        } catch (err) {
+          if (controller.signal.aborted) return
+          const message = friendlyFetchError(err, 'Slides request failed')
+          if (
+            session.runController !== controller ||
+            (session.inflightUrl && !urlsMatch(session.inflightUrl, resolvedPayload.url))
+          ) {
+            return
+          }
+          logPanel('slides:request:error', { error: message })
+          void send(session, { type: 'slides:run', ok: false, error: message })
+        }
+      })()
+    }
   }
 
   const abortHoverForTab = (tabId: number, requestId?: string) => {

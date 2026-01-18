@@ -48,6 +48,7 @@ const skillsEmptyEl = byId<HTMLDivElement>('skillsEmpty')
 const skillsConflictsEl = byId<HTMLDivElement>('skillsImportConflicts')
 const hoverSummariesToggleRoot = byId<HTMLDivElement>('hoverSummariesToggle')
 const summaryTimestampsToggleRoot = byId<HTMLDivElement>('summaryTimestampsToggle')
+const slidesParallelToggleRoot = byId<HTMLDivElement>('slidesParallelToggle')
 const extendedLoggingToggleRoot = byId<HTMLDivElement>('extendedLoggingToggle')
 const requestModeEl = byId<HTMLSelectElement>('requestMode')
 const firecrawlModeEl = byId<HTMLSelectElement>('firecrawlMode')
@@ -84,6 +85,7 @@ let chatEnabledValue = defaultSettings.chatEnabled
 let automationEnabledValue = defaultSettings.automationEnabled
 let hoverSummariesValue = defaultSettings.hoverSummaries
 let summaryTimestampsValue = defaultSettings.summaryTimestamps
+let slidesParallelValue = defaultSettings.slidesParallel
 let extendedLoggingValue = defaultSettings.extendedLogging
 
 let skillsCache: Skill[] = []
@@ -232,6 +234,7 @@ const saveNow = async () => {
       chatEnabled: chatEnabledValue,
       automationEnabled: automationEnabledValue,
       slidesEnabled: current.slidesEnabled,
+      slidesParallel: slidesParallelValue,
       slidesLayout: current.slidesLayout,
       summaryTimestamps: summaryTimestampsValue,
       extendedLogging: extendedLoggingValue,
@@ -1092,6 +1095,26 @@ const summaryTimestampsToggle = mountCheckbox(summaryTimestampsToggleRoot, {
   onCheckedChange: handleSummaryTimestampsToggleChange,
 })
 
+const updateSlidesParallelToggle = () => {
+  slidesParallelToggle.update({
+    id: 'options-slides-parallel',
+    label: 'Show summary first (parallel slides)',
+    checked: slidesParallelValue,
+    onCheckedChange: handleSlidesParallelToggleChange,
+  })
+}
+const handleSlidesParallelToggleChange = (checked: boolean) => {
+  slidesParallelValue = checked
+  updateSlidesParallelToggle()
+  scheduleAutoSave(0)
+}
+const slidesParallelToggle = mountCheckbox(slidesParallelToggleRoot, {
+  id: 'options-slides-parallel',
+  label: 'Show summary first (parallel slides)',
+  checked: slidesParallelValue,
+  onCheckedChange: handleSlidesParallelToggleChange,
+})
+
 const updateExtendedLoggingToggle = () => {
   extendedLoggingToggle.update({
     id: 'options-extended-logging',
@@ -1131,12 +1154,14 @@ async function load() {
   automationEnabledValue = s.automationEnabled
   hoverSummariesValue = s.hoverSummaries
   summaryTimestampsValue = s.summaryTimestamps
+  slidesParallelValue = s.slidesParallel
   extendedLoggingValue = s.extendedLogging
   updateAutoToggle()
   updateChatToggle()
   updateAutomationToggle()
   updateHoverSummariesToggle()
   updateSummaryTimestampsToggle()
+  updateSlidesParallelToggle()
   updateExtendedLoggingToggle()
   maxCharsEl.value = String(s.maxChars)
   requestModeEl.value = s.requestMode

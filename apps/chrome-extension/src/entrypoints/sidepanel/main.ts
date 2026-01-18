@@ -55,6 +55,7 @@ type BgToPanel =
   | { type: 'ui:status'; status: string }
   | { type: 'run:start'; run: RunStart }
   | { type: 'run:error'; message: string }
+  | { type: 'slides:run'; ok: boolean; runId?: string; url?: string; error?: string }
   | { type: 'chat:history'; requestId: string; ok: boolean; messages?: Message[]; error?: string }
   | { type: 'agent:chunk'; requestId: string; text: string }
   | {
@@ -209,6 +210,7 @@ md.use(slideTagPlugin)
 const panelState: PanelState = {
   ui: null,
   runId: null,
+  slidesRunId: null,
   currentSource: null,
   lastMeta: { inputSummary: null, model: null, modelLabel: null },
   summaryMarkdown: null,
@@ -223,6 +225,7 @@ let autoValue = false
 let chatEnabledValue = defaultSettings.chatEnabled
 let automationEnabledValue = defaultSettings.automationEnabled
 let slidesEnabledValue = defaultSettings.slidesEnabled
+let slidesParallelValue = defaultSettings.slidesParallel
 let autoKickTimer = 0
 
 const MAX_CHAT_MESSAGES = 1000
@@ -309,6 +312,7 @@ function hideSlideNotice() {
 function stopSlidesStream() {
   slidesHydrator.stop()
   setSlidesBusy(false)
+  panelState.slidesRunId = null
 }
 
 function setSlidesTranscriptTimedText(value: string | null) {
@@ -980,6 +984,7 @@ function resetSummaryView({
   panelState.slides = null
   if (clearRunId) {
     panelState.runId = null
+    panelState.slidesRunId = null
   }
   slidesExpanded = true
   slidesContextPending = false
@@ -1006,6 +1011,7 @@ function buildPanelCachePayload(): PanelCachePayload | null {
     url,
     title: panelState.currentSource?.title ?? null,
     runId: panelState.runId ?? null,
+    slidesRunId: panelState.slidesRunId ?? null,
     summaryMarkdown: panelState.summaryMarkdown ?? null,
     summaryFromCache: panelState.summaryFromCache ?? null,
     lastMeta: panelState.lastMeta,
@@ -1018,6 +1024,7 @@ function applyPanelCache(payload: PanelCachePayload, opts?: { preserveChat?: boo
   const preserveChat = opts?.preserveChat ?? false
   resetSummaryView({ preserveChat })
   panelState.runId = payload.runId ?? null
+  panelState.slidesRunId = payload.slidesRunId ?? payload.runId ?? null
   currentRunTabId = payload.tabId
   panelState.currentSource = { url: payload.url, title: payload.title ?? null }
   panelState.lastMeta = payload.lastMeta ?? { inputSummary: null, model: null, modelLabel: null }
@@ -1056,7 +1063,7 @@ function applyPanelCache(payload: PanelCachePayload, opts?: { preserveChat?: boo
     updateSlidesTextState()
   }
   slidesHydrator.syncFromCache({
-    runId: payload.runId ?? null,
+    runId: panelState.slidesRunId ?? null,
     summaryFromCache: payload.summaryFromCache,
     hasSlides: Boolean(payload.slides && payload.slides.slides.length > 0),
   })
@@ -2715,7 +2722,7 @@ function handleSlidesStatus(text: string) {
   headerController.setStatus(trimmed)
 }
 
-function startSlidesStream(run: RunStart) {
+function startSlidesStreamForRunId(runId: string) {
   const effectiveInputMode = inputModeOverride ?? inputMode
   if (!slidesEnabledValue || effectiveInputMode !== 'video') {
     stopSlidesStream()
@@ -2723,7 +2730,13 @@ function startSlidesStream(run: RunStart) {
   }
   hideSlideNotice()
   setSlidesBusy(true)
-  void slidesHydrator.start(run.id)
+  panelState.slidesRunId = runId
+  panelCacheController.scheduleSync()
+  void slidesHydrator.start(runId)
+}
+
+function startSlidesStream(run: RunStart) {
+  startSlidesStreamForRunId(run.id)
 }
 
 const slidesHydrator = createSlidesHydrator({
@@ -3207,6 +3220,7 @@ function updateControls(state: UiState) {
   chatEnabledValue = state.settings.chatEnabled
   automationEnabledValue = state.settings.automationEnabled
   slidesEnabledValue = state.settings.slidesEnabled
+  slidesParallelValue = state.settings.slidesParallel
   if (state.settings.slidesLayout && state.settings.slidesLayout !== slidesLayoutValue) {
     setSlidesLayout(state.settings.slidesLayout)
   }
@@ -3303,6 +3317,23 @@ function handleBgMessage(msg: BgToPanel) {
         finishStreamingMessage()
       }
       return
+    case 'slides:run': {
+      if (!msg.ok) {
+        setSlidesBusy(false)
+        if (msg.error) {
+          showSlideNotice(msg.error)
+        }
+        return
+      }
+      if (!msg.runId) return
+      const targetUrl = msg.url ?? null
+      const currentUrl = panelState.currentSource?.url ?? activeTabUrl ?? null
+      if (targetUrl && currentUrl && !urlsMatch(targetUrl, currentUrl)) {
+        return
+      }
+      startSlidesStreamForRunId(msg.runId)
+      return
+    }
     case 'slides:context': {
       if (!panelState.slides) return
       const expectedId = `slides-${slidesContextRequestId}`
@@ -3349,11 +3380,14 @@ function handleBgMessage(msg: BgToPanel) {
       }
       setActiveMetricsMode('summary')
       panelState.runId = msg.run.id
+      panelState.slidesRunId = slidesParallelValue ? null : msg.run.id
       panelState.currentSource = { url: msg.run.url, title: msg.run.title }
       currentRunTabId = activeTabId
       panelState.lastMeta = { inputSummary: null, model: null, modelLabel: null }
       pendingRunForPlannedSlides = msg.run
-      startSlidesStream(msg.run)
+      if (!slidesParallelValue) {
+        startSlidesStream(msg.run)
+      }
       void streamController.start(msg.run)
       return
     }

@@ -13,6 +13,7 @@ export type UiState = {
     chatEnabled: boolean
     automationEnabled: boolean
     slidesEnabled: boolean
+    slidesParallel: boolean
     slidesLayout: 'strip' | 'gallery'
     fontSize: number
     lineHeight: number
@@ -38,6 +39,7 @@ export type ChatMessage = Message & { id: string }
 export type PanelState = {
   ui: UiState | null
   runId: string | null
+  slidesRunId: string | null
   currentSource: { url: string; title: string | null } | null
   lastMeta: { inputSummary: string | null; model: string | null; modelLabel: string | null }
   summaryMarkdown: string | null

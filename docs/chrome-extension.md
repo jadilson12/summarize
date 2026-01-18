@@ -130,6 +130,7 @@ See `docs/media.md` for detection and transcript rules.
   - Leave blank to use daemon config/defaults; set a value to override.
   - Chat (advanced): enable/disable the side panel chat input (default on; summary is the first message).
   - Summary timestamps (advanced): include `[mm:ss]` links in summaries for media when available (default on).
+  - Slides parallel (advanced): show summary first and extract slides in parallel (default on).
   - Extended logging: send full input/output to daemon logs (requires daemon logging enabled).
   - Hover summary prompt: customize the prompt used for link hover summaries (prefilled; reset to default).
   - Pipeline mode: `page|url` (default auto).

@@ -14,6 +14,7 @@ export type Settings = {
   chatEnabled: boolean
   automationEnabled: boolean
   slidesEnabled: boolean
+  slidesParallel: boolean
   slidesLayout: SlidesLayout
   summaryTimestamps: boolean
   extendedLogging: boolean
@@ -201,6 +202,7 @@ export const defaultSettings: Settings = {
   chatEnabled: true,
   automationEnabled: false,
   slidesEnabled: false,
+  slidesParallel: true,
   slidesLayout: 'strip',
   summaryTimestamps: true,
   extendedLogging: false,
@@ -264,6 +266,10 @@ export async function loadSettings(): Promise<Settings> {
         : defaultSettings.automationEnabled,
     slidesEnabled:
       typeof raw.slidesEnabled === 'boolean' ? raw.slidesEnabled : defaultSettings.slidesEnabled,
+    slidesParallel:
+      typeof raw.slidesParallel === 'boolean'
+        ? raw.slidesParallel
+        : defaultSettings.slidesParallel,
     slidesLayout: normalizeSlidesLayout(raw.slidesLayout),
     summaryTimestamps:
       typeof raw.summaryTimestamps === 'boolean'
