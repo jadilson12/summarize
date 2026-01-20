@@ -478,10 +478,12 @@ const extractTranscriptFromPlayerPayload = async (
     }
     const aLang = typeof aTrack.languageCode === 'string' ? aTrack.languageCode : ''
     const bLang = typeof bTrack.languageCode === 'string' ? bTrack.languageCode : ''
-    if (aLang === 'en' && bLang !== 'en') {
+    const aIsEnglish = aLang === 'en' || aLang.startsWith('en-')
+    const bIsEnglish = bLang === 'en' || bLang.startsWith('en-')
+    if (aIsEnglish && !bIsEnglish) {
       return -1
     }
-    if (bLang === 'en' && aLang !== 'en') {
+    if (bIsEnglish && !aIsEnglish) {
       return 1
     }
     return 0
