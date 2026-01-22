@@ -1515,6 +1515,13 @@ test('sidepanel resumes slides when returning to a tab', async ({
         },
       ],
     }
+    await page.route('http://127.0.0.1:8787/v1/summarize/**/slides', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ok: true, slides: slidesPayload }),
+      })
+    })
 
     const slidesStreamBody = [
       'event: slides',

@@ -3983,7 +3983,6 @@ function resetChatState() {
 
 function finishStreamingMessage() {
   panelState.chatStreaming = false
-  chatSendBtn.disabled = false
   chatInputEl.focus()
   void persistChatHistory()
   maybeSendQueuedChat()
@@ -4061,7 +4060,6 @@ function startChatMessage(text: string) {
   chatController.addMessage(wrapMessage({ role: 'user', content: input, timestamp: Date.now() }))
 
   panelState.chatStreaming = true
-  chatSendBtn.disabled = true
   setActiveMetricsMode('chat')
   scrollToBottom(true)
   lastAction = 'chat'
@@ -4097,7 +4095,6 @@ function retryChat() {
   errorController.clearAll()
   abortAgentRequested = false
   panelState.chatStreaming = true
-  chatSendBtn.disabled = true
   setActiveMetricsMode('chat')
   lastAction = 'chat'
   scrollToBottom(true)
