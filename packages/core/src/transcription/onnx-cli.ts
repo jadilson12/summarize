@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { createWriteStream, promises as fs } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -6,6 +5,7 @@ import { basename, extname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
+import { spawnTracked } from '../processes.js'
 import { isFfmpegAvailable, runFfmpegTranscodeToWav } from './whisper/ffmpeg.js'
 import type { WhisperProgressEvent, WhisperTranscriptionResult } from './whisper/types.js'
 import { wrapError } from './whisper/utils.js'
@@ -367,9 +367,18 @@ export async function transcribeWithOnnxCliFile({
       totalDurationSeconds,
     })
 
-    const proc = argvCommand
-      ? spawn(argvCommand.command, argvCommand.args, { stdio: ['ignore', 'pipe', 'pipe'] })
-      : spawn(shellCommand as string, { shell: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const { proc } = argvCommand
+      ? spawnTracked(argvCommand.command, argvCommand.args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          label: provider ?? argvCommand.command,
+          kind: provider ?? 'onnx',
+        })
+      : spawnTracked(shellCommand as string, [], {
+          shell: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          label: provider ?? 'onnx',
+          kind: provider ?? 'onnx',
+        })
     let stdout = ''
     let stderr = ''
     proc.stdout?.setEncoding('utf8')

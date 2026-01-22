@@ -12,6 +12,7 @@ import { applyTheme, type ColorMode, type ColorScheme } from '../../lib/theme'
 import { mountCheckbox } from '../../ui/zag-checkbox'
 import { createLogsViewer } from './logs-viewer'
 import { mountOptionsPickers } from './pickers'
+import { createProcessesViewer } from './processes-viewer'
 
 declare const __SUMMARIZE_GIT_HASH__: string
 declare const __SUMMARIZE_VERSION__: string
@@ -74,6 +75,16 @@ const logsRawEl = byId<HTMLPreElement>('logsRaw')
 const logsTableEl = byId<HTMLTableElement>('logsTable')
 const logsParsedEl = byId<HTMLInputElement>('logsParsed')
 const logsMetaEl = byId<HTMLDivElement>('logsMeta')
+const processesRefreshBtn = byId<HTMLButtonElement>('processesRefresh')
+const processesAutoEl = byId<HTMLInputElement>('processesAuto')
+const processesShowCompletedEl = byId<HTMLInputElement>('processesShowCompleted')
+const processesLimitEl = byId<HTMLInputElement>('processesLimit')
+const processesStreamEl = byId<HTMLSelectElement>('processesStream')
+const processesTailEl = byId<HTMLInputElement>('processesTail')
+const processesMetaEl = byId<HTMLDivElement>('processesMeta')
+const processesTableEl = byId<HTMLTableElement>('processesTable')
+const processesLogsTitleEl = byId<HTMLDivElement>('processesLogsTitle')
+const processesLogsOutputEl = byId<HTMLPreElement>('processesLogsOutput')
 const tabsRoot = byId<HTMLDivElement>('tabs')
 const tabButtons = Array.from(tabsRoot.querySelectorAll<HTMLButtonElement>('[data-tab]'))
 const tabPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-tab-panel]'))
@@ -133,6 +144,23 @@ const logsViewer = createLogsViewer({
   isActive: () => resolveActiveTab() === 'logs',
 })
 
+const processesViewer = createProcessesViewer({
+  elements: {
+    refreshBtn: processesRefreshBtn,
+    autoEl: processesAutoEl,
+    showCompletedEl: processesShowCompletedEl,
+    limitEl: processesLimitEl,
+    streamEl: processesStreamEl,
+    tailEl: processesTailEl,
+    metaEl: processesMetaEl,
+    tableEl: processesTableEl,
+    logsTitleEl: processesLogsTitleEl,
+    logsOutputEl: processesLogsOutputEl,
+  },
+  getToken: () => tokenEl.value.trim(),
+  isActive: () => resolveActiveTab() === 'advanced',
+})
+
 const setActiveTab = (tabId: string) => {
   if (!tabIds.has(tabId)) return
   for (const button of tabButtons) {
@@ -149,6 +177,11 @@ const setActiveTab = (tabId: string) => {
     logsViewer.handleTabActivated()
   } else {
     logsViewer.handleTabDeactivated()
+  }
+  if (tabId === 'advanced') {
+    processesViewer.handleTabActivated()
+  } else {
+    processesViewer.handleTabDeactivated()
   }
 }
 
@@ -1209,6 +1242,9 @@ async function load() {
   if (resolveActiveTab() === 'logs') {
     logsViewer.handleTokenChanged()
   }
+  if (resolveActiveTab() === 'advanced') {
+    processesViewer.handleTokenChanged()
+  }
   isInitializing = false
 }
 
@@ -1219,6 +1255,7 @@ tokenEl.addEventListener('input', () => {
     void refreshModelPresets(tokenEl.value)
     void checkDaemonStatus(tokenEl.value)
     logsViewer.handleTokenChanged()
+    processesViewer.handleTokenChanged()
   }, 350)
   scheduleAutoSave(600)
 })

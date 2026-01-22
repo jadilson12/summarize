@@ -1,12 +1,17 @@
-import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnTracked } from '../../processes.js'
 
 export async function isFfmpegAvailable(): Promise<boolean> {
   return new Promise((resolve) => {
-    const proc = spawn('ffmpeg', ['-version'], { stdio: ['ignore', 'ignore', 'ignore'] })
+    const { proc } = spawnTracked('ffmpeg', ['-version'], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      label: 'ffmpeg',
+      kind: 'ffmpeg',
+      captureOutput: false,
+    })
     proc.on('error', () => resolve(false))
     proc.on('close', (code) => resolve(code === 0))
   })
@@ -27,7 +32,11 @@ export async function probeMediaDurationSecondsWithFfprobe(
       'default=noprint_wrappers=1:nokey=1',
       filePath,
     ]
-    const proc = spawn('ffprobe', args, { stdio: ['ignore', 'pipe', 'ignore'] })
+    const { proc } = spawnTracked('ffprobe', args, {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      label: 'ffprobe',
+      kind: 'ffprobe',
+    })
     let stdout = ''
     proc.stdout?.setEncoding('utf8')
     proc.stdout?.on('data', (chunk: string) => {
@@ -78,7 +87,11 @@ export async function runFfmpegSegment({
       '1',
       outputPattern,
     ]
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] })
+    const { proc } = spawnTracked('ffmpeg', args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      label: 'ffmpeg',
+      kind: 'ffmpeg',
+    })
     let stderr = ''
     proc.stderr?.setEncoding('utf8')
     proc.stderr?.on('data', (chunk: string) => {
@@ -221,7 +234,11 @@ async function runFfmpegTranscode({
   args: string[]
 }): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] })
+    const { proc } = spawnTracked('ffmpeg', args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      label: 'ffmpeg',
+      kind: 'ffmpeg',
+    })
     let stderr = ''
     proc.stderr?.setEncoding('utf8')
     proc.stderr?.on('data', (chunk: string) => {

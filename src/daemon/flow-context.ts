@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process'
 import { Writable } from 'node:stream'
 
 import type { CacheState } from '../cache.js'
@@ -9,6 +8,7 @@ import type {
 } from '../content/index.js'
 import type { ExecFileFn } from '../markitdown.js'
 import type { FixedModelSpec } from '../model-spec.js'
+import { execFileTracked } from '../processes.js'
 import type { AssetSummaryContext, SummarizeAssetArgs } from '../run/flows/asset/summary.js'
 import { summarizeAsset as summarizeAssetFlow } from '../run/flows/asset/summary.js'
 import type { UrlFlowContext } from '../run/flows/url/types.js'
@@ -204,7 +204,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     envForRun,
     stdout,
     stderr,
-    execFileImpl: execFile as unknown as ExecFileFn,
+    execFileImpl: execFileTracked as unknown as ExecFileFn,
     timeoutMs,
     retries,
     streamingEnabled: true,
@@ -259,7 +259,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     envForRun,
     stdout,
     stderr,
-    execFileImpl: execFile as unknown as ExecFileFn,
+    execFileImpl: execFileTracked as unknown as ExecFileFn,
     timeoutMs,
     preprocessMode,
     format: 'text',
@@ -323,7 +323,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
       envForRun,
       stdout,
       stderr,
-      execFileImpl: execFile as unknown as ExecFileFn,
+      execFileImpl: execFileTracked as unknown as ExecFileFn,
       fetch: metrics.trackedFetch,
     },
     flags: {

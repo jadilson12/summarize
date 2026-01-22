@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFileTracked } from '../processes.js'
 import { BIRD_TIP, TWITTER_HOSTS } from './constants.js'
 import { hasBirdCli } from './env.js'
 
@@ -151,7 +151,7 @@ export async function readTweetWithBird(args: {
   env: Record<string, string | undefined>
 }): Promise<BirdTweetPayload> {
   return await new Promise((resolve, reject) => {
-    execFile(
+    execFileTracked(
       'bird',
       ['read', args.url, '--json-full'],
       {

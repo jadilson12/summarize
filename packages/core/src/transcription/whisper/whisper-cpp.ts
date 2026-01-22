@@ -1,8 +1,8 @@
-import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnTracked } from '../../processes.js'
 import {
   DISABLE_LOCAL_WHISPER_CPP_ENV,
   WHISPER_CPP_BINARY_ENV,
@@ -116,7 +116,11 @@ export async function transcribeWithWhisperCppFile({
 
     try {
       await new Promise<void>((resolve, reject) => {
-        const proc = spawn(resolveWhisperCppBinary(), args, { stdio: ['ignore', 'ignore', 'pipe'] })
+        const { proc, handle } = spawnTracked(resolveWhisperCppBinary(), args, {
+          stdio: ['ignore', 'ignore', 'pipe'],
+          label: 'whisper.cpp',
+          kind: 'whisper.cpp',
+        })
         let stderr = ''
         proc.stderr?.setEncoding('utf8')
         let lastProgressPercent = -1
@@ -136,6 +140,7 @@ export async function transcribeWithWhisperCppFile({
             const pct = Math.max(0, Math.min(100, Math.round(raw)))
             if (pct === lastProgressPercent) continue
             lastProgressPercent = pct
+            handle?.setProgress(pct, 'transcribing')
             const processed =
               typeof totalDurationSeconds === 'number' && totalDurationSeconds > 0
                 ? (totalDurationSeconds * pct) / 100
@@ -191,7 +196,12 @@ function isWhisperCppEnabled(): boolean {
 async function isWhisperCliAvailable(): Promise<boolean> {
   const bin = resolveWhisperCppBinary()
   return new Promise((resolve) => {
-    const proc = spawn(bin, ['--help'], { stdio: ['ignore', 'ignore', 'ignore'] })
+    const { proc } = spawnTracked(bin, ['--help'], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      label: 'whisper.cpp',
+      kind: 'whisper.cpp',
+      captureOutput: false,
+    })
     proc.on('error', () => resolve(false))
     proc.on('close', (code) => resolve(code === 0))
   })

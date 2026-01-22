@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -6,6 +5,8 @@ import path from 'node:path'
 
 import type { ExtractedLinkContent, MediaCache } from '../content/index.js'
 import { extractYouTubeVideoId, isDirectMediaUrl, isYouTubeUrl } from '../content/index.js'
+import type { ProcessHandle } from '../processes.js'
+import { spawnTracked } from '../processes.js'
 import { resolveExecutableInPath } from '../run/env.js'
 import type { SlideSettings } from './settings.js'
 import {
@@ -752,7 +753,7 @@ async function downloadYoutubeVideo({
     args,
     timeoutMs: Math.max(timeoutMs, YT_DLP_TIMEOUT_MS),
     errorLabel: 'yt-dlp',
-    onStderrLine: (line) => {
+    onStderrLine: (line, handle) => {
       if (!onProgress) return
       const trimmed = line.trim()
       if (trimmed.startsWith('progress:')) {
@@ -772,6 +773,7 @@ async function downloadYoutubeVideo({
         const percent = Math.max(0, Math.min(100, Math.round((downloaded / totalBytes) * 100)))
         const detail = `(${formatBytes(downloaded)}/${formatBytes(totalBytes)})`
         onProgress(percent, detail)
+        handle?.setProgress(percent, detail)
         return
       }
       if (!trimmed.startsWith('[download]')) return
@@ -785,10 +787,12 @@ async function downloadYoutubeVideo({
         speedMatch?.[1] ? `at ${speedMatch[1]}` : null,
         etaMatch?.[1] ? `ETA ${etaMatch[1]}` : null,
       ].filter(Boolean)
-      onProgress(percent, detailParts.length ? detailParts.join(' ') : undefined)
+      const detail = detailParts.length ? detailParts.join(' ') : undefined
+      onProgress(percent, detail)
+      handle?.setProgress(percent, detail ?? null)
     },
     onStdoutLine: onProgress
-      ? (line) => {
+      ? (line, handle) => {
           if (!line.trim().startsWith('progress:')) return
           const payload = line.trim().slice('progress:'.length)
           const [downloadedRaw, totalRaw, estimateRaw] = payload.split('|')
@@ -806,6 +810,7 @@ async function downloadYoutubeVideo({
           const percent = Math.max(0, Math.min(100, Math.round((downloaded / totalBytes) * 100)))
           const detail = `(${formatBytes(downloaded)}/${formatBytes(totalBytes)})`
           onProgress(percent, detail)
+          handle?.setProgress(percent, detail)
         }
       : undefined,
   })
@@ -1707,17 +1712,23 @@ async function runProcess({
   args: string[]
   timeoutMs: number
   errorLabel: string
-  onStderrLine?: (line: string) => void
-  onStdoutLine?: (line: string) => void
+  onStderrLine?: (line: string, handle: ProcessHandle | null) => void
+  onStdoutLine?: (line: string, handle: ProcessHandle | null) => void
 }): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const { proc, handle } = spawnTracked(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      label: errorLabel,
+      kind: errorLabel,
+      captureOutput: false,
+    })
     let stderr = ''
     let stderrBuffer = ''
     let stdoutBuffer = ''
 
     const flushLine = (line: string) => {
-      if (onStderrLine) onStderrLine(line)
+      if (onStderrLine) onStderrLine(line, handle)
+      handle?.appendOutput('stderr', line)
       if (stderr.length < 8192) {
         stderr += line
         if (!line.endsWith('\n')) stderr += '\n'
@@ -1745,7 +1756,9 @@ async function runProcess({
           const lines = stdoutBuffer.split(/\r?\n/)
           stdoutBuffer = lines.pop() ?? ''
           for (const line of lines) {
-            if (line) handleStdoutLine(line)
+            if (!line) continue
+            handleStdoutLine(line, handle)
+            handle?.appendOutput('stdout', line)
           }
         })
       }
@@ -1768,7 +1781,8 @@ async function runProcess({
       }
       if (stdoutBuffer.trim().length > 0) {
         const handleStdoutLine = onStdoutLine ?? onStderrLine
-        if (handleStdoutLine) handleStdoutLine(stdoutBuffer.trim())
+        if (handleStdoutLine) handleStdoutLine(stdoutBuffer.trim(), handle)
+        handle?.appendOutput('stdout', stdoutBuffer.trim())
       }
       if (code === 0) {
         resolve()
@@ -1978,9 +1992,16 @@ async function runProcessCapture({
   errorLabel: string
 }): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const { proc, handle } = spawnTracked(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      label: errorLabel,
+      kind: errorLabel,
+      captureOutput: false,
+    })
     let stdout = ''
     let stderr = ''
+    let stdoutBuffer = ''
+    let stderrBuffer = ''
 
     const timeout = setTimeout(() => {
       proc.kill('SIGKILL')
@@ -1991,6 +2012,12 @@ async function runProcessCapture({
       proc.stdout.setEncoding('utf8')
       proc.stdout.on('data', (chunk: string) => {
         stdout += chunk
+        stdoutBuffer += chunk
+        const lines = stdoutBuffer.split(/\r?\n/)
+        stdoutBuffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line) handle?.appendOutput('stdout', line)
+        }
       })
     }
     if (proc.stderr) {
@@ -1998,6 +2025,12 @@ async function runProcessCapture({
       proc.stderr.on('data', (chunk: string) => {
         if (stderr.length < 8192) {
           stderr += chunk
+        }
+        stderrBuffer += chunk
+        const lines = stderrBuffer.split(/\r?\n/)
+        stderrBuffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line) handle?.appendOutput('stderr', line)
         }
       })
     }
@@ -2009,6 +2042,8 @@ async function runProcessCapture({
 
     proc.on('close', (code) => {
       clearTimeout(timeout)
+      if (stdoutBuffer.trim()) handle?.appendOutput('stdout', stdoutBuffer.trim())
+      if (stderrBuffer.trim()) handle?.appendOutput('stderr', stderrBuffer.trim())
       if (code === 0) {
         resolve(stdout)
         return
@@ -2031,9 +2066,15 @@ async function runProcessCaptureBuffer({
   errorLabel: string
 }): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const { proc, handle } = spawnTracked(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      label: errorLabel,
+      kind: errorLabel,
+      captureOutput: false,
+    })
     const chunks: Buffer[] = []
     let stderr = ''
+    let stderrBuffer = ''
 
     const timeout = setTimeout(() => {
       proc.kill('SIGKILL')
@@ -2051,6 +2092,12 @@ async function runProcessCaptureBuffer({
         if (stderr.length < 8192) {
           stderr += chunk
         }
+        stderrBuffer += chunk
+        const lines = stderrBuffer.split(/\r?\n/)
+        stderrBuffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line) handle?.appendOutput('stderr', line)
+        }
       })
     }
 
@@ -2061,6 +2108,7 @@ async function runProcessCaptureBuffer({
 
     proc.on('close', (code) => {
       clearTimeout(timeout)
+      if (stderrBuffer.trim()) handle?.appendOutput('stderr', stderrBuffer.trim())
       if (code === 0) {
         resolve(Buffer.concat(chunks))
         return
@@ -2188,9 +2236,15 @@ async function runOcrOnSlides(
 async function runTesseract(tesseractPath: string, imagePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const args = [imagePath, 'stdout', '--oem', '3', '--psm', '6']
-    const proc = spawn(tesseractPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const { proc, handle } = spawnTracked(tesseractPath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      label: 'tesseract',
+      kind: 'tesseract',
+      captureOutput: false,
+    })
     let stdout = ''
     let stderr = ''
+    let stderrBuffer = ''
 
     const timeout = setTimeout(() => {
       proc.kill('SIGKILL')
@@ -2209,6 +2263,12 @@ async function runTesseract(tesseractPath: string, imagePath: string): Promise<s
         if (stderr.length < 8192) {
           stderr += chunk
         }
+        stderrBuffer += chunk
+        const lines = stderrBuffer.split(/\r?\n/)
+        stderrBuffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line) handle?.appendOutput('stderr', line)
+        }
       })
     }
 
@@ -2219,6 +2279,7 @@ async function runTesseract(tesseractPath: string, imagePath: string): Promise<s
 
     proc.on('close', (code) => {
       clearTimeout(timeout)
+      if (stderrBuffer.trim()) handle?.appendOutput('stderr', stderrBuffer.trim())
       if (code === 0) {
         resolve(stdout)
         return

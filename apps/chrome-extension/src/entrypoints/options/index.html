@@ -378,6 +378,64 @@
               </div>
             </div>
           </section>
+          <section class="section">
+            <div class="processHeader">
+              <div>
+                <h2>Process Manager</h2>
+                <div class="hint">Track external tools spawned by the daemon (ffmpeg, yt-dlp, tesseract).</div>
+              </div>
+              <div class="processActions">
+                <label class="logsToggle">
+                  <input id="processesAuto" type="checkbox" />
+                  Auto refresh
+                </label>
+                <button id="processesRefresh" type="button" class="miniButton">Refresh</button>
+              </div>
+            </div>
+            <div class="processControls">
+              <label class="processControl">
+                <span>Show completed</span>
+                <input id="processesShowCompleted" type="checkbox" />
+              </label>
+              <label class="processControl">
+                <span>Limit</span>
+                <input id="processesLimit" type="number" min="10" max="200" step="10" value="80" />
+              </label>
+              <label class="processControl">
+                <span>Log tail</span>
+                <input id="processesTail" type="number" min="20" max="1000" step="20" value="200" />
+              </label>
+              <label class="processControl">
+                <span>Stream</span>
+                <select id="processesStream">
+                  <option value="merged">Merged</option>
+                  <option value="stdout">Stdout</option>
+                  <option value="stderr">Stderr</option>
+                </select>
+              </label>
+            </div>
+            <div id="processesMeta" class="hint"></div>
+            <div class="processTableWrap">
+              <table id="processesTable" class="processTable">
+                <thead>
+                  <tr>
+                    <th>Tool</th>
+                    <th>PID</th>
+                    <th>Status</th>
+                    <th>Elapsed</th>
+                    <th>Progress</th>
+                    <th>Run</th>
+                    <th>Command</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="processLogs">
+              <div id="processesLogsTitle" class="processLogsTitle">Logs</div>
+              <pre id="processesLogsOutput" class="processLogsOutput"></pre>
+            </div>
+          </section>
         </div>
 
         <div

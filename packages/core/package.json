@@ -23,6 +23,10 @@
       "types": "./dist/types/prompts/index.d.ts",
       "import": "./dist/esm/prompts/index.js"
     },
+    "./processes": {
+      "types": "./dist/types/processes.d.ts",
+      "import": "./dist/esm/processes.js"
+    },
     "./language": {
       "types": "./dist/types/language.d.ts",
       "import": "./dist/esm/language.js"

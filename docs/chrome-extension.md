@@ -140,9 +140,10 @@ See `docs/media.md` for detection and transcript rules.
   - Pipeline mode: `page|url` (default auto).
   - Firecrawl: `off|auto|always`.
   - Markdown mode: `readability|llm|auto|off`.
-  - Preprocess: `off|auto|always`.
-  - YouTube mode: `no-auto|yt-dlp|web|apify` (default auto).
-  - Timeout (e.g. `90s`, `2m`), retries, max output tokens (e.g. `2k`).
+- Preprocess: `off|auto|always`.
+- YouTube mode: `no-auto|yt-dlp|web|apify` (default auto).
+- Timeout (e.g. `90s`, `2m`), retries, max output tokens (e.g. `2k`).
+- Process manager: live list of daemon-spawned tools (ffmpeg, yt-dlp, tesseract, etc.) with logs.
 - Extension includes current settings in request; daemon treats them like CLI flags (`--model`, `--length`, `--language`, `--prompt`).
 
 ## Token Pairing / Setup Mode

@@ -1,8 +1,8 @@
-import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnTracked } from '../../../../processes.js'
 import {
   probeMediaDurationSecondsWithFfprobe,
   type TranscriptionProvider,
@@ -216,7 +216,11 @@ export const fetchDurationSecondsWithYtDlp = async ({
 
   return new Promise((resolve) => {
     const args = ['--skip-download', '--dump-json', '--no-playlist', '--no-warnings', url]
-    const proc = spawn(ytDlpPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const { proc } = spawnTracked(ytDlpPath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      label: 'yt-dlp',
+      kind: 'yt-dlp',
+    })
     let stdout = ''
     let stderr = ''
 
@@ -225,11 +229,11 @@ export const fetchDurationSecondsWithYtDlp = async ({
       resolve(null)
     }, 30_000)
 
-    proc.stdout.on('data', (chunk) => {
+    proc.stdout?.on('data', (chunk) => {
       stdout += chunk.toString()
     })
 
-    proc.stderr.on('data', (chunk) => {
+    proc.stderr?.on('data', (chunk) => {
       stderr += chunk.toString()
       if (stderr.length > MAX_STDERR_BYTES) {
         stderr = stderr.slice(-MAX_STDERR_BYTES)
@@ -298,7 +302,11 @@ async function downloadAudio(
       url,
     ]
 
-    const proc = spawn(ytDlpPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const { proc, handle } = spawnTracked(ytDlpPath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      label: 'yt-dlp',
+      kind: 'yt-dlp',
+    })
     let stderr = ''
     let progressBuffer = ''
     let lastTotalBytes: number | null = null
@@ -318,6 +326,13 @@ async function downloadAudio(
         normalizedTotal = lastTotalBytes
       }
       onProgress(downloadedBytes, normalizedTotal)
+      if (normalizedTotal && normalizedTotal > 0) {
+        const pct = Math.max(
+          0,
+          Math.min(100, Math.round((downloadedBytes / normalizedTotal) * 100))
+        )
+        handle?.setProgress(pct, 'download')
+      }
     }
 
     const handleProgressChunk = (chunk: string) => {

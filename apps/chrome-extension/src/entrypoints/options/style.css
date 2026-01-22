@@ -629,6 +629,126 @@ form {
   word-break: break-word;
 }
 
+.processHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.processActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.processControls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.processControl span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.processTableWrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: auto;
+  max-height: 280px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.processTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.processTable th,
+.processTable td {
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.processTable thead th {
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  z-index: 1;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.processTable tbody tr + tr td {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.processTable tbody tr.selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.processTable td.status {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.processTable td.status.running {
+  color: var(--accent);
+}
+
+.processTable td.status.exited {
+  color: var(--muted);
+}
+
+.processTable td.status.error {
+  color: var(--danger);
+}
+
+.processTable td.command {
+  color: var(--muted);
+}
+
+.processTable td.processEmpty {
+  color: var(--muted);
+  text-align: center;
+}
+
+.processLogsTitle {
+  font-size: 11px;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.processLogsOutput {
+  margin: 0;
+  padding: 8px 10px;
+  min-height: 160px;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .sectionTitle {
   margin: 0;
 }
@@ -828,6 +948,15 @@ form {
 
   .uiGrid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .processControls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .processHeader {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

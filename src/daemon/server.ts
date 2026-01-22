@@ -6,6 +6,7 @@ import { Writable } from 'node:stream'
 import type { CacheState } from '../cache.js'
 import { loadSummarizeConfig } from '../config.js'
 import { createDaemonLogger } from '../logging/daemon.js'
+import { runWithProcessContext, setProcessObserver } from '../processes.js'
 import { refreshFree } from '../refresh-free.js'
 import { createCacheStateFromConfig, refreshCacheStoreIfMissing } from '../run/cache-state.js'
 import { resolveExecutableInPath } from '../run/env.js'
@@ -22,6 +23,11 @@ import type { DaemonConfig } from './config.js'
 import { DAEMON_HOST, DAEMON_PORT_DEFAULT } from './constants.js'
 import { resolveDaemonLogPaths } from './launchd.js'
 import { buildModelPickerOptions } from './models.js'
+import {
+  buildProcessListResult,
+  buildProcessLogsResult,
+  ProcessRegistry,
+} from './process-registry.js'
 import {
   extractContentForUrl,
   streamSummaryForUrl,
@@ -477,6 +483,9 @@ export async function runDaemonServer({
     noMediaCacheFlag: false,
   })
 
+  const processRegistry = new ProcessRegistry()
+  setProcessObserver(processRegistry.createObserver())
+
   const sessions = new Map<string, Session>()
   const refreshSessions = new Map<string, Session>()
   let activeRefreshSessionId: string | null = null
@@ -576,6 +585,32 @@ export async function runDaemonServer({
           },
           cors
         )
+        return
+      }
+
+      const processLogsMatch = pathname.match(/^\/v1\/processes\/([^/]+)\/logs$/)
+      if (req.method === 'GET' && processLogsMatch) {
+        const id = processLogsMatch[1]
+        const tail = clampNumber(Number(url.searchParams.get('tail') ?? '200'), 20, 1000)
+        const streamRaw = (url.searchParams.get('stream') ?? 'merged').toLowerCase()
+        const stream =
+          streamRaw === 'stdout' || streamRaw === 'stderr' ? streamRaw : ('merged' as const)
+        const result = buildProcessLogsResult(processRegistry, id, { tail, stream })
+        if (!result) {
+          json(res, 404, { ok: false, error: 'not found' }, cors)
+          return
+        }
+        json(res, 200, result, cors)
+        return
+      }
+
+      if (req.method === 'GET' && pathname === '/v1/processes') {
+        const includeCompleted =
+          (url.searchParams.get('includeCompleted') ?? '').toLowerCase() === 'true' ||
+          url.searchParams.get('includeCompleted') === '1'
+        const limit = clampNumber(Number(url.searchParams.get('limit') ?? '80'), 10, 200)
+        const result = buildProcessListResult(processRegistry, { includeCompleted, limit })
+        json(res, 200, result, cors)
         return
       }
 
@@ -717,16 +752,21 @@ export async function runDaemonServer({
             const requestCache: CacheState = noCache
               ? { ...cacheState, mode: 'bypass' as const, store: null }
               : cacheState
-            const { extracted, slides } = await extractContentForUrl({
-              env,
-              fetchImpl,
-              input: { url: pageUrl, title, maxCharacters },
-              cache: requestCache,
-              mediaCache,
-              overrides,
-              format,
-              slides: slidesSettings,
-            })
+            const runId = randomUUID()
+            const { extracted, slides } = await runWithProcessContext(
+              { runId, source: 'extract' },
+              async () =>
+                extractContentForUrl({
+                  env,
+                  fetchImpl,
+                  input: { url: pageUrl, title, maxCharacters },
+                  cache: requestCache,
+                  mediaCache,
+                  overrides,
+                  format,
+                  slides: slidesSettings,
+                })
+            )
             const slidesPayload =
               slides && slides.slides.length > 0
                 ? {
@@ -828,7 +868,7 @@ export async function runDaemonServer({
 
         json(res, 200, { ok: true, id: session.id }, cors)
 
-        void (async () => {
+        void runWithProcessContext({ runId: session.id, source: 'summarize' }, async () => {
           const slideLogState: {
             startedAt: number | null
             requested: boolean
@@ -1187,7 +1227,7 @@ export async function runDaemonServer({
           } finally {
             scheduleSessionCleanup({ session, sessions })
           }
-        })()
+        })
         return
       }
 
@@ -1221,20 +1261,23 @@ export async function runDaemonServer({
           return
         }
 
+        const runId = `agent-${randomUUID()}`
         const wantsJson = wantsJsonResponse(req, url)
         if (wantsJson) {
           try {
-            const assistant = await completeAgentResponse({
-              env,
-              pageUrl,
-              pageTitle,
-              pageContent,
-              messages,
-              modelOverride:
-                modelOverride && modelOverride.toLowerCase() !== 'auto' ? modelOverride : null,
-              tools,
-              automationEnabled,
-            })
+            const assistant = await runWithProcessContext({ runId, source: 'agent' }, async () =>
+              completeAgentResponse({
+                env,
+                pageUrl,
+                pageTitle,
+                pageContent,
+                messages,
+                modelOverride:
+                  modelOverride && modelOverride.toLowerCase() !== 'auto' ? modelOverride : null,
+                tools,
+                automationEnabled,
+              })
+            )
             json(res, 200, { ok: true, assistant }, cors)
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
@@ -1263,20 +1306,22 @@ export async function runDaemonServer({
         }
 
         try {
-          await streamAgentResponse({
-            env,
-            pageUrl,
-            pageTitle,
-            pageContent,
-            messages,
-            modelOverride:
-              modelOverride && modelOverride.toLowerCase() !== 'auto' ? modelOverride : null,
-            tools,
-            automationEnabled,
-            onChunk: (text) => writeEvent({ event: 'chunk', data: { text } }),
-            onAssistant: (assistant) => writeEvent({ event: 'assistant', data: assistant }),
-            signal: controller.signal,
-          })
+          await runWithProcessContext({ runId, source: 'agent' }, async () =>
+            streamAgentResponse({
+              env,
+              pageUrl,
+              pageTitle,
+              pageContent,
+              messages,
+              modelOverride:
+                modelOverride && modelOverride.toLowerCase() !== 'auto' ? modelOverride : null,
+              tools,
+              automationEnabled,
+              onChunk: (text) => writeEvent({ event: 'chunk', data: { text } }),
+              onAssistant: (assistant) => writeEvent({ event: 'assistant', data: assistant }),
+              signal: controller.signal,
+            })
+          )
           writeEvent({ event: 'done', data: {} })
           res.end()
         } catch (error) {
