@@ -1664,6 +1664,12 @@ test('sidepanel switches between page, video, and slides modes', async ({
         body: sseBody(text),
       })
     })
+    const waitForRunEvents = (runId: string) =>
+      page.waitForResponse(
+        (response) =>
+          response.url().includes(`/v1/summarize/${runId}/events`) && response.status() === 200,
+        { timeout: 10_000 }
+      )
 
     const placeholderPng = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO3kq0cAAAAASUVORK5CYII=',
@@ -1787,6 +1793,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
         reason: 'manual',
       },
     })
+    await waitForRunEvents('run-page')
     await expect(page.locator('#render')).toContainText('Page summary')
     await expect(
       page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
@@ -1808,6 +1815,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
         reason: 'manual',
       },
     })
+    await waitForRunEvents('run-video')
     await expect(page.locator('#render')).toContainText('Video summary')
     await expect(
       page.locator('img.slideStrip__thumbImage, img.slideInline__thumbImage')
@@ -1829,6 +1837,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
         reason: 'manual',
       },
     })
+    await waitForRunEvents('run-slides')
     await expect(page.locator('#render')).toContainText('Slides summary')
 
     await page.waitForFunction(
