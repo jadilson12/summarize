@@ -1293,7 +1293,7 @@ test('sidepanel clears summary when tab url changes', async ({
     })
 
     await expect(page.locator('#title')).toHaveText('New Title')
-    await expect(page.locator('#render')).toBeEmpty()
+    await expect(page.locator('.render__markdownHost')).toHaveText('')
     assertNoErrors(harness)
   } finally {
     await closeExtension(harness.context, harness.userDataDir)
@@ -1311,6 +1311,7 @@ test('sidepanel restores cached state when switching tabs', async ({
       token: 'test-token',
       autoSummarize: false,
       slidesEnabled: true,
+      slidesOcrEnabled: true,
     })
     const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
@@ -1352,7 +1353,12 @@ test('sidepanel restores cached state when switching tabs', async ({
 
     const tabAState = buildUiState({
       tab: { id: 1, url: 'https://example.com/a', title: 'Alpha Tab' },
-      settings: { autoSummarize: false, slidesEnabled: true, tokenPresent: true },
+      settings: {
+        autoSummarize: false,
+        slidesEnabled: true,
+        slidesOcrEnabled: true,
+        tokenPresent: true,
+      },
       status: '',
     })
     await sendBgMessage(harness, { type: 'ui:state', state: tabAState })
@@ -1414,7 +1420,12 @@ test('sidepanel restores cached state when switching tabs', async ({
 
     const tabBState = buildUiState({
       tab: { id: 2, url: 'https://example.com/b', title: 'Bravo Tab' },
-      settings: { autoSummarize: false, slidesEnabled: true, tokenPresent: true },
+      settings: {
+        autoSummarize: false,
+        slidesEnabled: true,
+        slidesOcrEnabled: true,
+        tokenPresent: true,
+      },
       status: '',
     })
     await sendBgMessage(harness, { type: 'ui:state', state: tabBState })
@@ -1481,6 +1492,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
       autoSummarize: false,
       slidesEnabled: true,
       slidesParallel: true,
+      slidesOcrEnabled: true,
     })
     const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
@@ -1549,6 +1561,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
         autoSummarize: false,
         slidesEnabled: true,
         slidesParallel: true,
+        slidesOcrEnabled: true,
         tokenPresent: true,
       },
     })
@@ -1559,6 +1572,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
         autoSummarize: false,
         slidesEnabled: true,
         slidesParallel: true,
+        slidesOcrEnabled: true,
         tokenPresent: true,
       },
     })
@@ -1594,6 +1608,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
       autoSummarize: false,
       slidesEnabled: false,
       slidesLayout: 'gallery',
+      slidesOcrEnabled: true,
     })
     const page = await openExtensionPage(harness, 'sidepanel.html', '#title', () => {
       ;(
@@ -1664,6 +1679,7 @@ test('sidepanel switches between page, video, and slides modes', async ({
         slidesEnabled: false,
         slidesParallel: true,
         slidesLayout: 'gallery',
+        slidesOcrEnabled: true,
         tokenPresent: true,
       },
       status: '',
@@ -2007,7 +2023,12 @@ test('sidepanel video selection requests slides when enabled', async ({
 
   try {
     await mockDaemonSummarize(harness)
-    await seedSettings(harness, { token: 'test-token', autoSummarize: false, slidesEnabled: true })
+    await seedSettings(harness, {
+      token: 'test-token',
+      autoSummarize: false,
+      slidesEnabled: true,
+      slidesOcrEnabled: true,
+    })
     const contentPage = await harness.context.newPage()
     await contentPage.route('https://www.youtube.com/**', async (route) => {
       await route.fulfill({
