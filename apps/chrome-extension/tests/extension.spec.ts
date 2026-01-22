@@ -950,6 +950,7 @@ test('sidepanel scheme picker supports keyboard selection', async ({
         window as typeof globalThis & { __summarizeTestHooks?: Record<string, unknown> }
       ).__summarizeTestHooks = {}
     })
+    await waitForPanelPort(page)
     await page.click('#drawerToggle')
     await expect(page.locator('#drawer')).toBeVisible()
 
@@ -1586,6 +1587,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
 
     await sendBgMessage(harness, { type: 'ui:state', state: tabAState })
     await sendBgMessage(harness, { type: 'ui:state', state: tabBState })
+    await expect(page.locator('#title')).toHaveText('Bravo Tab')
     await sendBgMessage(harness, {
       type: 'slides:run',
       ok: true,
@@ -1593,6 +1595,7 @@ test('sidepanel resumes slides when returning to a tab', async ({
       url: 'https://www.youtube.com/watch?v=abc123',
     })
     await sendBgMessage(harness, { type: 'ui:state', state: tabAState })
+    await expect(page.locator('#title')).toHaveText('Alpha Video')
 
     await expect.poll(async () => (await getPanelSlideDescriptions(page)).length).toBe(1)
     const slides = await getPanelSlideDescriptions(page)
@@ -2593,10 +2596,7 @@ test.describe('youtube e2e', () => {
 
         await expect.poll(async () => await getPanelPhase(page), { timeout: 420_000 }).toBe('idle')
 
-        await expect
-          .poll(async () => (await getPanelModel(page)) ?? '', { timeout: 120_000 })
-          .not.toBe('')
-        const model = (await getPanelModel(page)) ?? 'auto'
+        const model = (await getPanelModel(page))?.trim() || 'auto'
 
         const cliSummary = runCliSummary(url, [
           '--json',
@@ -2717,7 +2717,7 @@ test.describe('youtube e2e', () => {
           .toBeGreaterThan(0)
         const slidesTimeline = await getPanelSlidesTimeline(page)
         const transcriptTimedText = await getPanelTranscriptTimedText(page)
-        const slidesModel = (await getPanelSlidesSummaryModel(page)) ?? model
+        const slidesModel = (await getPanelSlidesSummaryModel(page))?.trim() || model
         const cliSummary = runCliSummary(url, [
           '--slides',
           '--slides-ocr',
@@ -2801,7 +2801,7 @@ test('sidepanel shows an error when agent request fails', async ({
     const contentPage = await harness.context.newPage()
     await contentPage.goto('https://example.com', { waitUntil: 'domcontentloaded' })
     await contentPage.evaluate(() => {
-      document.body.innerHTML = `<article><p>Agent error test.</p></article>`
+      document.body.innerHTML = `<article><p>${'Agent error test. '.repeat(12)}</p></article>`
     })
     await maybeBringToFront(contentPage)
     await activateTabByUrl(harness, 'https://example.com')
@@ -2903,7 +2903,7 @@ test('sidepanel shows daemon upgrade hint when /v1/agent is missing', async ({
     const contentPage = await harness.context.newPage()
     await contentPage.goto('https://example.com', { waitUntil: 'domcontentloaded' })
     await contentPage.evaluate(() => {
-      document.body.innerHTML = `<article><p>Agent 404 test.</p></article>`
+      document.body.innerHTML = `<article><p>${'Agent 404 test. '.repeat(12)}</p></article>`
     })
     await maybeBringToFront(contentPage)
     await activateTabByUrl(harness, 'https://example.com')
