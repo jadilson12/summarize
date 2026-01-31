@@ -271,6 +271,7 @@ ${heading('Env Vars')}
   SUMMARIZE_ONNX_PARAKEET_CMD optional (command to run Parakeet ONNX transcription; use {input} placeholder)
   SUMMARIZE_ONNX_CANARY_CMD optional (command to run Canary ONNX transcription; use {input} placeholder)
   YT_DLP_PATH           optional path to yt-dlp binary for audio extraction
+  SUMMARIZE_YT_DLP_COOKIES_FROM_BROWSER optional yt-dlp cookies source (e.g. chrome, chrome:Profile 1)
   FAL_KEY               optional FAL AI API key for audio transcription
 
 ${heading('Hint')}

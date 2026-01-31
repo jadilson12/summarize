@@ -38,6 +38,7 @@
 - Slides: clear slide progress line before the finish summary to avoid stray `Slides x/y` output.
 - Slides: parse `Slide N/Total` labels and stabilize title/body extraction.
 - CLI: `--no-cache` now bypasses summary caching only; transcript/media caches still apply.
+- Slides: allow yt-dlp cookies-from-browser via `SUMMARIZE_YT_DLP_COOKIES_FROM_BROWSER` to avoid YouTube 403s.
 - Chrome Side Panel chat: keep auto-scroll pinned while streaming when you’re already at the bottom.
 - Chrome Side Panel: scope streams/state per window so other windows don’t wipe active summaries.
 - Chrome Side Panel chat: support JSON agent replies with explicit SSE/JSON negotiation to avoid “stream ended” errors.

@@ -78,6 +78,11 @@ function resolveSlidesStreamFallback(env: Record<string, string | undefined>): b
   return raw === '1' || raw === 'true' || raw === 'yes'
 }
 
+function buildYtDlpCookiesArgs(cookiesFromBrowser?: string | null): string[] {
+  const value = typeof cookiesFromBrowser === 'string' ? cookiesFromBrowser.trim() : ''
+  return value.length > 0 ? ['--cookies-from-browser', value] : []
+}
+
 function buildSlidesMediaCacheKey(url: string): string {
   return `${url}#summarize-slides`
 }
@@ -114,6 +119,7 @@ type ExtractSlidesArgs = {
   env: Record<string, string | undefined>
   timeoutMs: number
   ytDlpPath: string | null
+  ytDlpCookiesFromBrowser?: string | null
   ffmpegPath: string | null
   tesseractPath: string | null
   hooks?: {
@@ -216,6 +222,7 @@ export async function extractSlidesForSource({
   env,
   timeoutMs,
   ytDlpPath,
+  ytDlpCookiesFromBrowser,
   ffmpegPath,
   tesseractPath,
   hooks,
@@ -317,6 +324,7 @@ export async function extractSlidesForSource({
             url: source.url,
             timeoutMs,
             format,
+            cookiesFromBrowser: ytDlpCookiesFromBrowser,
             onProgress: (percent, detail) => {
               const ratio = clamp(percent / 100, 0, 1)
               const mapped = P_FETCH_VIDEO + ratio * (P_DOWNLOAD_VIDEO - P_FETCH_VIDEO)
@@ -345,6 +353,7 @@ export async function extractSlidesForSource({
             url: source.url,
             format,
             timeoutMs,
+            cookiesFromBrowser: ytDlpCookiesFromBrowser,
           })
           inputPath = streamUrl
           logSlidesTiming(`yt-dlp stream url (detect+extract, format=${format})`, streamStartedAt)
@@ -362,14 +371,15 @@ export async function extractSlidesForSource({
           reportSlidesProgress?.('downloading video', P_FETCH_VIDEO)
           const downloadStartedAt = Date.now()
           try {
-            const downloaded = await downloadYoutubeVideo({
-              ytDlpPath: ytDlp,
-              url: source.url,
-              timeoutMs,
-              format,
-              onProgress: (percent, detail) => {
-                const ratio = clamp(percent / 100, 0, 1)
-                const mapped = P_FETCH_VIDEO + ratio * (P_DOWNLOAD_VIDEO - P_FETCH_VIDEO)
+          const downloaded = await downloadYoutubeVideo({
+            ytDlpPath: ytDlp,
+            url: source.url,
+            timeoutMs,
+            format,
+            cookiesFromBrowser: ytDlpCookiesFromBrowser,
+            onProgress: (percent, detail) => {
+              const ratio = clamp(percent / 100, 0, 1)
+              const mapped = P_FETCH_VIDEO + ratio * (P_DOWNLOAD_VIDEO - P_FETCH_VIDEO)
                 reportSlidesProgress?.('downloading video', mapped, detail)
               },
             })
@@ -390,12 +400,13 @@ export async function extractSlidesForSource({
             warnings.push(`Failed to download video; falling back to stream URL: ${String(error)}`)
             reportSlidesProgress?.('fetching video', P_FETCH_VIDEO)
             const streamStartedAt = Date.now()
-            const streamUrl = await resolveYoutubeStreamUrl({
-              ytDlpPath: ytDlp,
-              url: source.url,
-              format,
-              timeoutMs,
-            })
+          const streamUrl = await resolveYoutubeStreamUrl({
+            ytDlpPath: ytDlp,
+            url: source.url,
+            format,
+            timeoutMs,
+            cookiesFromBrowser: ytDlpCookiesFromBrowser,
+          })
             inputPath = streamUrl
             logSlidesTiming(`yt-dlp stream url (direct source, format=${format})`, streamStartedAt)
           }
@@ -724,12 +735,14 @@ async function downloadYoutubeVideo({
   url,
   timeoutMs,
   format,
+  cookiesFromBrowser,
   onProgress,
 }: {
   ytDlpPath: string
   url: string
   timeoutMs: number
   format: string
+  cookiesFromBrowser?: string | null
   onProgress?: ((percent: number, detail?: string) => void) | null
 }): Promise<{ filePath: string; cleanup: () => Promise<void> }> {
   const dir = await fs.mkdtemp(path.join(tmpdir(), `summarize-slides-${randomUUID()}-`))
@@ -743,6 +756,7 @@ async function downloadYoutubeVideo({
     '--no-warnings',
     '--concurrent-fragments',
     '4',
+    ...buildYtDlpCookiesArgs(cookiesFromBrowser),
     ...(onProgress ? ['--progress', '--newline', '--progress-template', progressTemplate] : []),
     '-o',
     outputTemplate,
@@ -924,13 +938,15 @@ async function resolveYoutubeStreamUrl({
   url,
   timeoutMs,
   format,
+  cookiesFromBrowser,
 }: {
   ytDlpPath: string
   url: string
   timeoutMs: number
   format: string
+  cookiesFromBrowser?: string | null
 }): Promise<string> {
-  const args = ['-f', format, '-g', url]
+  const args = ['-f', format, ...buildYtDlpCookiesArgs(cookiesFromBrowser), '-g', url]
   const output = await runProcessCapture({
     command: ytDlpPath,
     args,

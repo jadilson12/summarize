@@ -54,5 +54,8 @@ summarize "https://www.youtube.com/watch?v=..." --slides --slides-ocr
 Slides are written to `./slides/<videoId>/` by default (override with `--slides-dir`). OCR results
 are stored in `slides.json` and included in JSON output (`--json`).
 
+If yt-dlp gets a 403 from YouTube, set `SUMMARIZE_YT_DLP_COOKIES_FROM_BROWSER=chrome` (or
+`chrome:Profile 1`) to pass cookies through to yt-dlp.
+
 Relevant flags:
 - `--slides-scene-threshold <value>`: starting threshold for scene detection (auto-tuned as needed)

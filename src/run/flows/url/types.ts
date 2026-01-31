@@ -102,6 +102,7 @@ export type UrlFlowModel = {
     firecrawlApiKey: string | null
     apifyToken: string | null
     ytDlpPath: string | null
+    ytDlpCookiesFromBrowser: string | null
     falApiKey: string | null
     openaiTranscriptionKey: string | null
   }

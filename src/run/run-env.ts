@@ -17,6 +17,7 @@ export type EnvState = {
   anthropicConfigured: boolean
   apifyToken: string | null
   ytDlpPath: string | null
+  ytDlpCookiesFromBrowser: string | null
   falApiKey: string | null
   cliAvailability: Partial<Record<CliProvider, boolean>>
   envForAuto: Record<string, string | undefined>
@@ -90,6 +91,16 @@ export function resolveEnvState({
     if (explicit.length > 0) return explicit
     return resolveExecutableInPath('yt-dlp', envForRun)
   })()
+  const ytDlpCookiesFromBrowser = (() => {
+    const raw =
+      typeof envForRun.SUMMARIZE_YT_DLP_COOKIES_FROM_BROWSER === 'string'
+        ? envForRun.SUMMARIZE_YT_DLP_COOKIES_FROM_BROWSER
+        : typeof envForRun.YT_DLP_COOKIES_FROM_BROWSER === 'string'
+          ? envForRun.YT_DLP_COOKIES_FROM_BROWSER
+          : ''
+    const value = raw.trim()
+    return value.length > 0 ? value : null
+  })()
   const falApiKey = typeof envForRun.FAL_KEY === 'string' ? envForRun.FAL_KEY : null
   const firecrawlKey =
     typeof envForRun.FIRECRAWL_API_KEY === 'string' ? envForRun.FIRECRAWL_API_KEY : null
@@ -150,6 +161,7 @@ export function resolveEnvState({
     anthropicConfigured,
     apifyToken,
     ytDlpPath,
+    ytDlpCookiesFromBrowser,
     falApiKey,
     cliAvailability,
     envForAuto,

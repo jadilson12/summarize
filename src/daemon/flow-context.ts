@@ -154,6 +154,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     envForAuto,
     apifyToken,
     ytDlpPath,
+    ytDlpCookiesFromBrowser,
     falApiKey,
   } = resolveRunContextState({
     env: envForRun,
@@ -393,6 +394,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
         firecrawlApiKey,
         apifyToken,
         ytDlpPath,
+        ytDlpCookiesFromBrowser,
         falApiKey,
         openaiTranscriptionKey,
       },
