@@ -704,6 +704,9 @@ export async function summarizeExtractedUrl({
   const promptHash = cacheStore ? buildPromptHash(prompt) : null;
   const lengthKey = buildLengthKey(flags.lengthArg);
   const languageKey = buildLanguageKey(flags.outputLanguage);
+  const autoSelectionCacheModel = model.isFallbackModel
+    ? `selection:${model.requestedModelInput.toLowerCase()}`
+    : null;
 
   let summaryResult: Awaited<ReturnType<typeof model.summaryEngine.runSummaryAttempt>> | null =
     null;
@@ -751,28 +754,80 @@ export async function summarizeExtractedUrl({
 
   if (cacheStore && contentHash && promptHash) {
     cacheChecked = true;
-    for (const attempt of attempts) {
-      if (!model.summaryEngine.envHasKeyFor(attempt.requiredEnv)) continue;
+    if (autoSelectionCacheModel) {
       const key = buildSummaryCacheKey({
         contentHash,
         promptHash,
-        model: attempt.userModelId,
+        model: autoSelectionCacheModel,
         lengthKey,
         languageKey,
       });
-      const cached = cacheStore.getText("summary", key);
-      if (!cached) continue;
-      writeVerbose(io.stderr, flags.verbose, "cache hit summary", flags.verboseColor, io.envForRun);
-      onModelChosen?.(attempt.userModelId);
-      summaryResult = {
-        summary: cached,
-        summaryAlreadyPrinted: false,
-        modelMeta: buildModelMetaFromAttempt(attempt),
-        maxOutputTokensForCall: null,
-      };
-      usedAttempt = attempt;
-      summaryFromCache = true;
-      break;
+      const cached = cacheStore.getJson<{ summary?: unknown; model?: unknown }>("summary", key);
+      const cachedSummary =
+        cached && typeof cached.summary === "string" ? cached.summary.trim() : null;
+      const cachedModelId = cached && typeof cached.model === "string" ? cached.model.trim() : null;
+      if (cachedSummary) {
+        const cachedAttempt = cachedModelId
+          ? (attempts.find((attempt) => attempt.userModelId === cachedModelId) ?? null)
+          : null;
+        const fallbackAttempt =
+          attempts.find((attempt) => model.summaryEngine.envHasKeyFor(attempt.requiredEnv)) ??
+          attempts[0] ??
+          null;
+        const matchedAttempt =
+          cachedAttempt && model.summaryEngine.envHasKeyFor(cachedAttempt.requiredEnv)
+            ? cachedAttempt
+            : fallbackAttempt;
+        if (matchedAttempt) {
+          writeVerbose(
+            io.stderr,
+            flags.verbose,
+            "cache hit summary (auto selection)",
+            flags.verboseColor,
+            io.envForRun,
+          );
+          onModelChosen?.(cachedModelId || matchedAttempt.userModelId);
+          summaryResult = {
+            summary: cachedSummary,
+            summaryAlreadyPrinted: false,
+            modelMeta: buildModelMetaFromAttempt(matchedAttempt),
+            maxOutputTokensForCall: null,
+          };
+          usedAttempt = matchedAttempt;
+          summaryFromCache = true;
+        }
+      }
+    }
+    if (!summaryFromCache) {
+      for (const attempt of attempts) {
+        if (!model.summaryEngine.envHasKeyFor(attempt.requiredEnv)) continue;
+        const key = buildSummaryCacheKey({
+          contentHash,
+          promptHash,
+          model: attempt.userModelId,
+          lengthKey,
+          languageKey,
+        });
+        const cached = cacheStore.getText("summary", key);
+        if (!cached) continue;
+        writeVerbose(
+          io.stderr,
+          flags.verbose,
+          "cache hit summary",
+          flags.verboseColor,
+          io.envForRun,
+        );
+        onModelChosen?.(attempt.userModelId);
+        summaryResult = {
+          summary: cached,
+          summaryAlreadyPrinted: false,
+          modelMeta: buildModelMetaFromAttempt(attempt),
+          maxOutputTokensForCall: null,
+        };
+        usedAttempt = attempt;
+        summaryFromCache = true;
+        break;
+      }
     }
   }
   if (cacheChecked && !summaryFromCache) {
@@ -878,15 +933,37 @@ export async function summarizeExtractedUrl({
   }
 
   if (!summaryFromCache && cacheStore && contentHash && promptHash) {
-    const key = buildSummaryCacheKey({
+    const perModelKey = buildSummaryCacheKey({
       contentHash,
       promptHash,
       model: usedAttempt.userModelId,
       lengthKey,
       languageKey,
     });
-    cacheStore.setText("summary", key, summaryResult.summary, cacheState.ttlMs);
+    cacheStore.setText("summary", perModelKey, summaryResult.summary, cacheState.ttlMs);
     writeVerbose(io.stderr, flags.verbose, "cache write summary", flags.verboseColor, io.envForRun);
+    if (autoSelectionCacheModel) {
+      const selectionKey = buildSummaryCacheKey({
+        contentHash,
+        promptHash,
+        model: autoSelectionCacheModel,
+        lengthKey,
+        languageKey,
+      });
+      cacheStore.setJson(
+        "summary",
+        selectionKey,
+        { summary: summaryResult.summary, model: usedAttempt.userModelId },
+        cacheState.ttlMs,
+      );
+      writeVerbose(
+        io.stderr,
+        flags.verbose,
+        "cache write summary (auto selection)",
+        flags.verboseColor,
+        io.envForRun,
+      );
+    }
   }
   if (
     !summaryFromCache &&

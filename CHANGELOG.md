@@ -22,6 +22,7 @@
 - CLI stdin: support binary-safe piping/input temp files to prevent corruption on non-text stdin (#76).
 - Extract mode: allow `--extract` for local media files (#72).
 - Auto model/daemon fallback: skip model attempts when required API keys are missing and normalize env-key checks in daemon fallback (#67, #78).
+- Cache: for auto presets (`auto`/`free`/named auto), prefer preset-level winner cache entries so stale per-candidate cache hits don’t override newer better-model results.
 - Media: treat X broadcasts (`/i/broadcasts/...`) as transcript-first media and prefer URL mode.
 - YouTube: keep explicit `--youtube apify` working when HTML fetch fails, while preserving duration metadata parity (#64, thanks @entropyy0).
 - Transcription: stabilize Groq-first fallback flow (no duplicate Groq retries in file mode), improve terminal error reporting, and surface Groq setup in media guidance (#71, thanks @n0an).
