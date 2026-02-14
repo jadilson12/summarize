@@ -1,5 +1,13 @@
 import ora, { type Options as OraOptions } from "ora";
 
+function hasVisibleText(input: string): boolean {
+  // Strip CSI and OSC escape sequences before checking for visible text.
+  const withoutAnsi = input
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\u001B\][^\u0007]*(?:\u0007|\u001B\\)/g, "");
+  return withoutAnsi.trim().length > 0;
+}
+
 export function startSpinner({
   text,
   enabled,
@@ -81,6 +89,8 @@ export function startSpinner({
 
   const setText = (next: string) => {
     if (ended) return;
+    if (!hasVisibleText(next)) return;
+    if (spinner.text === next) return;
     spinner.text = next;
     if (!paused) spinner.render?.();
   };

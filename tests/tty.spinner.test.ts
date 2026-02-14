@@ -89,4 +89,29 @@ describe("tty spinner", () => {
     expect(renderSpy).not.toHaveBeenCalled();
     expect(writes).toContain("\u001b[2K");
   });
+
+  it("ignores empty/ansi-only and duplicate text updates", () => {
+    oraMock.mockReset();
+    const renderSpy = vi.fn();
+    const spinnerState = {
+      isSpinning: true,
+      text: "Loading",
+      stop: vi.fn(),
+      clear: vi.fn(),
+      render: renderSpy,
+      start() {
+        return this;
+      },
+    };
+    oraMock.mockImplementationOnce(() => spinnerState);
+
+    const spinner = startSpinner({ text: "Loading", enabled: true, stream });
+    spinner.setText("   ");
+    spinner.setText("\u001b[36m\u001b[0m");
+    spinner.setText("Loading");
+    spinner.setText("Next");
+
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    expect(spinnerState.text).toBe("Next");
+  });
 });

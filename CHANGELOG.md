@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.11 - Unreleased
+## 0.11.0 - Unreleased
 
 ### Highlights
 
@@ -89,6 +89,7 @@
 - Slides: progress updates during yt-dlp downloads and OSC progress mirrors slide extraction.
 - Slides: reuse the media cache for downloaded videos (even with `--no-cache`).
 - Slides: clear slide progress line before the finish summary to avoid stray `Slides x/y` output.
+- CLI status line: ignore empty/ANSI-only spinner updates and duplicate texts to prevent flicker/blank status frames.
 - Automation: require userScripts (no isolated-world fallback), with improved guidance and in-panel permission notice.
 - CLI: clear OSC progress on SIGINT/SIGTERM to avoid stuck indicators.
 - CLI local files: avoid hangs when stream usage never resolves and preprocess PDFs automatically for custom OpenAI-compatible `OPENAI_BASE_URL` endpoints (e.g. non-`api.openai.com`).
