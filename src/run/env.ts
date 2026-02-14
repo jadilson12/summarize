@@ -72,7 +72,12 @@ export function parseCliUserModelId(modelId: string): {
     .split('/')
     .map((part) => part.trim())
   const provider = parts[1]?.toLowerCase()
-  if (provider !== 'claude' && provider !== 'codex' && provider !== 'gemini' && provider !== 'agent') {
+  if (
+    provider !== 'claude' &&
+    provider !== 'codex' &&
+    provider !== 'gemini' &&
+    provider !== 'agent'
+  ) {
     throw new Error(`Invalid CLI model id "${modelId}". Expected cli/<provider>/<model>.`)
   }
   const model = parts.slice(2).join('/').trim()
@@ -81,7 +86,12 @@ export function parseCliUserModelId(modelId: string): {
 
 export function parseCliProviderArg(raw: string): CliProvider {
   const normalized = raw.trim().toLowerCase()
-  if (normalized === 'claude' || normalized === 'codex' || normalized === 'gemini' || normalized === 'agent') {
+  if (
+    normalized === 'claude' ||
+    normalized === 'codex' ||
+    normalized === 'gemini' ||
+    normalized === 'agent'
+  ) {
     return normalized as CliProvider
   }
   throw new Error(`Unsupported --cli: ${raw}`)

@@ -73,6 +73,8 @@ export type UrlFlowModel = {
   requestedModelLabel: string
   fixedModelSpec: FixedModelSpec | null
   isFallbackModel: boolean
+  isImplicitAutoSelection: boolean
+  allowAutoCliFallback: boolean
   isNamedModelSelection: boolean
   wantsFreeNamedModel: boolean
   desiredOutputTokens: number | null

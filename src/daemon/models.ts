@@ -1,5 +1,6 @@
 import { getModels } from '@mariozechner/pi-ai'
 import type { SummarizeConfig } from '../config.js'
+import { resolveCliAvailability } from '../run/env.js'
 import { resolveEnvState } from '../run/run-env.js'
 
 export type ModelPickerOption = {
@@ -131,6 +132,10 @@ export async function buildModelPickerOptions({
     anthropic: boolean
     openrouter: boolean
     zai: boolean
+    cliClaude: boolean
+    cliGemini: boolean
+    cliCodex: boolean
+    cliAgent: boolean
   }
   openaiBaseUrl: string | null
   localModelsSource: { kind: 'openai-compatible'; baseUrlHost: string } | null
@@ -144,9 +149,31 @@ export async function buildModelPickerOptions({
     anthropic: envState.anthropicConfigured,
     openrouter: envState.openrouterConfigured,
     zai: Boolean(envState.zaiApiKey),
+    cliClaude: false,
+    cliGemini: false,
+    cliCodex: false,
+    cliAgent: false,
   }
+  const cliAvailability = resolveCliAvailability({ env: envForRun, config: configForCli })
+  providers.cliClaude = Boolean(cliAvailability.claude)
+  providers.cliGemini = Boolean(cliAvailability.gemini)
+  providers.cliCodex = Boolean(cliAvailability.codex)
+  providers.cliAgent = Boolean(cliAvailability.agent)
 
   const options: ModelPickerOption[] = [{ id: 'auto', label: 'Auto' }]
+
+  if (providers.cliClaude) {
+    options.push({ id: 'cli/claude', label: 'CLI: Claude' })
+  }
+  if (providers.cliGemini) {
+    options.push({ id: 'cli/gemini', label: 'CLI: Gemini' })
+  }
+  if (providers.cliCodex) {
+    options.push({ id: 'cli/codex', label: 'CLI: Codex' })
+  }
+  if (providers.cliAgent) {
+    options.push({ id: 'cli/agent', label: 'CLI: Cursor Agent' })
+  }
 
   if (providers.openrouter) {
     options.push({ id: 'free', label: 'Free (OpenRouter)' })

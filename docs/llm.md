@@ -7,7 +7,8 @@ read_when:
 # LLM / summarization mode
 
 By default `summarize` will call an LLM using **direct provider API keys**. When CLI tools are
-installed, auto mode can use local CLI models when `cli.enabled` is set (see `docs/cli.md`).
+installed, auto mode can use local CLI models via `cli.enabled` or implicit auto CLI fallback
+(`cli.autoFallback`; see `docs/cli.md`).
 
 ## Defaults
 

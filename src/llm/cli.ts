@@ -40,8 +40,27 @@ type CliRunResult = {
   costUsd: number | null
 }
 
+type JsonCliProvider = Exclude<CliProvider, 'codex'>
+
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0
+
+const JSON_RESULT_FIELDS = ['result', 'response', 'output', 'message', 'text'] as const
+
+function isJsonCliProvider(provider: CliProvider): provider is JsonCliProvider {
+  return provider !== 'codex'
+}
+
+function getCliProviderConfig(
+  provider: CliProvider,
+  config: CliConfig | null | undefined
+): CliConfig[CliProvider] | undefined {
+  if (!config) return undefined
+  if (provider === 'claude') return config.claude
+  if (provider === 'codex') return config.codex
+  if (provider === 'gemini') return config.gemini
+  return config.agent
+}
 
 export function isCliDisabled(
   provider: CliProvider,
@@ -57,14 +76,7 @@ export function resolveCliBinary(
   config: CliConfig | null | undefined,
   env: Record<string, string | undefined>
 ): string {
-  const providerConfig =
-    provider === 'claude'
-      ? config?.claude
-      : provider === 'codex'
-        ? config?.codex
-        : provider === 'gemini'
-          ? config?.gemini
-          : config?.agent
+  const providerConfig = getCliProviderConfig(provider, config)
   if (isNonEmptyString(providerConfig?.binary)) return providerConfig.binary.trim()
   const pathKey = PROVIDER_PATH_ENV[provider]
   if (isNonEmptyString(env[pathKey])) return env[pathKey].trim()
@@ -268,6 +280,75 @@ const parseCodexUsageFromJsonl = (
   return { usage, costUsd }
 }
 
+function extractJsonResultText(payload: Record<string, unknown>): string | null {
+  for (const key of JSON_RESULT_FIELDS) {
+    const value = payload[key]
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim()
+    }
+  }
+  return null
+}
+
+function parseJsonProviderUsage(
+  provider: JsonCliProvider,
+  payload: Record<string, unknown>
+): LlmTokenUsage | null {
+  if (provider === 'claude') return parseClaudeUsage(payload)
+  if (provider === 'gemini') return parseGeminiUsage(payload)
+  return null
+}
+
+function parseJsonProviderCostUsd(
+  provider: JsonCliProvider,
+  payload: Record<string, unknown>
+): number | null {
+  if (provider !== 'claude') return null
+  return toNumber(payload.total_cost_usd) ?? null
+}
+
+function appendJsonProviderArgs({
+  provider,
+  args,
+  allowTools,
+  model,
+  prompt,
+}: {
+  provider: JsonCliProvider
+  args: string[]
+  allowTools: boolean
+  model: string | null
+  prompt: string
+}): string {
+  if (provider === 'claude' || provider === 'agent') {
+    args.push('--print')
+  }
+  args.push('--output-format', 'json')
+  if (provider === 'agent' && !allowTools) {
+    args.push('--mode', 'ask')
+  }
+  if (model && model.trim().length > 0) {
+    args.push('--model', model.trim())
+  }
+  if (allowTools) {
+    if (provider === 'claude') {
+      args.push('--tools', 'Read', '--dangerously-skip-permissions')
+    }
+    if (provider === 'gemini') {
+      args.push('--yolo')
+    }
+  }
+  if (provider === 'agent') {
+    args.push(prompt)
+    return ''
+  }
+  if (provider === 'gemini') {
+    args.push('--prompt', prompt)
+    return ''
+  }
+  return prompt
+}
+
 export async function runCliModel({
   provider,
   prompt,
@@ -289,8 +370,7 @@ export async function runCliModel({
       ? { ...env, GEMINI_CLI_NO_RELAUNCH: 'true' }
       : env
 
-  const providerConfig =
-    provider === 'claude' ? config?.claude : provider === 'codex' ? config?.codex : config?.gemini
+  const providerConfig = getCliProviderConfig(provider, config)
 
   if (providerConfig?.extraArgs?.length) {
     args.push(...providerConfig.extraArgs)
@@ -335,66 +415,16 @@ export async function runCliModel({
     throw new Error('CLI returned empty output')
   }
 
-  if (provider === 'agent') {
-    args.push('--print', '--output-format', 'json')
-    if (!allowTools) {
-      args.push('--mode', 'ask')
-    }
-    if (model && model.trim().length > 0) {
-      args.push('--model', model.trim())
-    }
-    args.push(prompt)
-    const { stdout } = await execCliWithInput({
-      execFileImpl: execFileFn,
-      cmd: binary,
-      args,
-      input: '',
-      timeoutMs,
-      env: effectiveEnv,
-      cwd,
-    })
-    const trimmed = stdout.trim()
-    if (!trimmed) {
-      throw new Error('CLI returned empty output')
-    }
-    const parsed = parseJsonFromOutput(trimmed)
-    if (parsed && typeof parsed === 'object') {
-      const payload = parsed as Record<string, unknown>
-      const resultText =
-        payload.result ??
-        payload.response ??
-        payload.output ??
-        payload.message ??
-        payload.text ??
-        null
-      if (typeof resultText === 'string' && resultText.trim().length > 0) {
-        return { text: resultText.trim(), usage: null, costUsd: null }
-      }
-    }
-    return { text: trimmed, usage: null, costUsd: null }
+  if (!isJsonCliProvider(provider)) {
+    throw new Error(`Unsupported CLI provider "${provider}".`)
   }
-
-  if (model && model.trim().length > 0) {
-    args.push('--model', model.trim())
-  }
-  if (provider === 'claude') {
-    args.push('--print')
-  }
-  args.push('--output-format', 'json')
-  if (allowTools) {
-    if (provider === 'claude') {
-      args.push('--tools', 'Read', '--dangerously-skip-permissions')
-    }
-    if (provider === 'gemini') {
-      args.push('--yolo')
-    }
-  }
+  const input = appendJsonProviderArgs({ provider, args, allowTools, model, prompt })
 
   const { stdout } = await execCliWithInput({
     execFileImpl: execFileFn,
     cmd: binary,
     args,
-    input: prompt,
+    input,
     timeoutMs,
     env: effectiveEnv,
     cwd,
@@ -406,11 +436,11 @@ export async function runCliModel({
   const parsed = parseJsonFromOutput(trimmed)
   if (parsed && typeof parsed === 'object') {
     const payload = parsed as Record<string, unknown>
-    const resultText = payload.result ?? payload.response
-    if (typeof resultText === 'string' && resultText.trim().length > 0) {
-      const usage = provider === 'claude' ? parseClaudeUsage(payload) : parseGeminiUsage(payload)
-      const costUsd = provider === 'claude' ? (toNumber(payload.total_cost_usd) ?? null) : null
-      return { text: resultText.trim(), usage, costUsd }
+    const resultText = extractJsonResultText(payload)
+    if (resultText) {
+      const usage = parseJsonProviderUsage(provider, payload)
+      const costUsd = parseJsonProviderCostUsd(provider, payload)
+      return { text: resultText, usage, costUsd }
     }
   }
   return { text: trimmed, usage: null, costUsd: null }

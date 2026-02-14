@@ -23,6 +23,9 @@ describe('llm/cli more branches', () => {
     expect(resolveCliBinary('gemini', null, { SUMMARIZE_CLI_GEMINI: ' gemini-env ' })).toBe(
       'gemini-env'
     )
+    expect(resolveCliBinary('agent', null, { AGENT_PATH: ' /tmp/agent-bin ' })).toBe(
+      '/tmp/agent-bin'
+    )
 
     expect(resolveCliBinary('claude', null, {})).toBe('claude')
     expect(resolveCliBinary('agent', null, {})).toBe('agent')
