@@ -1,51 +1,50 @@
-import type { CacheState } from '../cache.js'
-import { type ExtractedLinkContent, isYouTubeUrl, type MediaCache } from '../content/index.js'
-import type { RunMetricsReport } from '../costs.js'
-import { buildFinishLineVariants, buildLengthPartsForFinishLine } from '../run/finish-line.js'
-import { deriveExtractionUi } from '../run/flows/url/extract.js'
-import { runUrlFlow } from '../run/flows/url/flow.js'
-import { buildUrlPrompt, summarizeExtractedUrl } from '../run/flows/url/summary.js'
-import type { RunOverrides } from '../run/run-settings.js'
+import type { CacheState } from "../cache.js";
+import type { RunMetricsReport } from "../costs.js";
+import type { RunOverrides } from "../run/run-settings.js";
 import type {
   SlideExtractionResult,
   SlideImage,
   SlideSettings,
   SlideSourceKind,
-} from '../slides/index.js'
-
-import { createDaemonUrlFlowContext } from './flow-context.js'
-import { countWords, estimateDurationSecondsFromWords, formatInputSummary } from './meta.js'
-import { formatProgress } from './summarize-progress.js'
+} from "../slides/index.js";
+import { type ExtractedLinkContent, isYouTubeUrl, type MediaCache } from "../content/index.js";
+import { buildFinishLineVariants, buildLengthPartsForFinishLine } from "../run/finish-line.js";
+import { deriveExtractionUi } from "../run/flows/url/extract.js";
+import { runUrlFlow } from "../run/flows/url/flow.js";
+import { buildUrlPrompt, summarizeExtractedUrl } from "../run/flows/url/summary.js";
+import { createDaemonUrlFlowContext } from "./flow-context.js";
+import { countWords, estimateDurationSecondsFromWords, formatInputSummary } from "./meta.js";
+import { formatProgress } from "./summarize-progress.js";
 
 export type VisiblePageInput = {
-  url: string
-  title: string | null
-  text: string
-  truncated: boolean
-}
+  url: string;
+  title: string | null;
+  text: string;
+  truncated: boolean;
+};
 
 export type UrlModeInput = {
-  url: string
-  title: string | null
-  maxCharacters: number | null
-}
+  url: string;
+  title: string | null;
+  maxCharacters: number | null;
+};
 
 export type StreamSink = {
-  writeChunk: (text: string) => void
-  onModelChosen: (modelId: string) => void
-  writeStatus?: ((text: string) => void) | null
+  writeChunk: (text: string) => void;
+  onModelChosen: (modelId: string) => void;
+  writeStatus?: ((text: string) => void) | null;
   writeMeta?:
     | ((data: { inputSummary?: string | null; summaryFromCache?: boolean | null }) => void)
-    | null
-}
+    | null;
+};
 
 export type VisiblePageMetrics = {
-  elapsedMs: number
-  summary: string
-  details: string | null
-  summaryDetailed: string
-  detailsDetailed: string | null
-}
+  elapsedMs: number;
+  summary: string;
+  details: string | null;
+  summaryDetailed: string;
+  detailsDetailed: string | null;
+};
 
 function buildDaemonMetrics({
   elapsedMs,
@@ -57,16 +56,16 @@ function buildDaemonMetrics({
   compactExtraParts,
   detailedExtraParts,
 }: {
-  elapsedMs: number
-  summaryFromCache: boolean
-  label: string | null
-  modelLabel: string
-  report: RunMetricsReport
-  costUsd: number | null
-  compactExtraParts: string[] | null
-  detailedExtraParts: string[] | null
+  elapsedMs: number;
+  summaryFromCache: boolean;
+  label: string | null;
+  modelLabel: string;
+  report: RunMetricsReport;
+  costUsd: number | null;
+  compactExtraParts: string[] | null;
+  detailedExtraParts: string[] | null;
 }): VisiblePageMetrics {
-  const elapsedLabel = summaryFromCache ? 'Cached' : null
+  const elapsedLabel = summaryFromCache ? "Cached" : null;
   const { compact, detailed } = buildFinishLineVariants({
     elapsedMs,
     elapsedLabel,
@@ -76,7 +75,7 @@ function buildDaemonMetrics({
     costUsd,
     compactExtraParts,
     detailedExtraParts,
-  })
+  });
 
   return {
     elapsedMs,
@@ -84,51 +83,51 @@ function buildDaemonMetrics({
     details: compact.details,
     summaryDetailed: detailed.line,
     detailsDetailed: detailed.details,
-  }
+  };
 }
 
 function guessSiteName(url: string): string | null {
   try {
-    const { hostname } = new URL(url)
-    return hostname || null
+    const { hostname } = new URL(url);
+    return hostname || null;
   } catch {
-    return null
+    return null;
   }
 }
 
 function buildInputSummaryForExtracted(extracted: ExtractedLinkContent): string | null {
-  const isYouTube = extracted.siteName === 'YouTube' || isYouTubeUrl(extracted.url)
+  const isYouTube = extracted.siteName === "YouTube" || isYouTubeUrl(extracted.url);
 
   const transcriptChars =
-    typeof extracted.transcriptCharacters === 'number' && extracted.transcriptCharacters > 0
+    typeof extracted.transcriptCharacters === "number" && extracted.transcriptCharacters > 0
       ? extracted.transcriptCharacters
-      : null
-  const hasTranscript = transcriptChars != null
+      : null;
+  const hasTranscript = transcriptChars != null;
 
   const transcriptWords =
     hasTranscript && transcriptChars != null
       ? (extracted.transcriptWordCount ?? Math.max(0, Math.round(transcriptChars / 6)))
-      : null
+      : null;
 
   const exactDurationSeconds =
-    typeof extracted.mediaDurationSeconds === 'number' && extracted.mediaDurationSeconds > 0
+    typeof extracted.mediaDurationSeconds === "number" && extracted.mediaDurationSeconds > 0
       ? extracted.mediaDurationSeconds
-      : null
+      : null;
   const estimatedDurationSeconds =
     transcriptWords != null && transcriptWords > 0
       ? estimateDurationSecondsFromWords(transcriptWords)
-      : null
+      : null;
 
-  const durationSeconds = hasTranscript ? (exactDurationSeconds ?? estimatedDurationSeconds) : null
+  const durationSeconds = hasTranscript ? (exactDurationSeconds ?? estimatedDurationSeconds) : null;
   const isDurationApproximate =
-    hasTranscript && durationSeconds != null && exactDurationSeconds == null
+    hasTranscript && durationSeconds != null && exactDurationSeconds == null;
 
   const kindLabel = (() => {
-    if (isYouTube) return 'YouTube'
-    if (!hasTranscript) return null
-    if (extracted.isVideoOnly || extracted.video) return 'video'
-    return 'podcast'
-  })()
+    if (isYouTube) return "YouTube";
+    if (!hasTranscript) return null;
+    if (extracted.isVideoOnly || extracted.video) return "video";
+    return "podcast";
+  })();
 
   return formatInputSummary({
     kindLabel,
@@ -136,7 +135,7 @@ function buildInputSummaryForExtracted(extracted: ExtractedLinkContent): string 
     words: hasTranscript ? transcriptWords : extracted.wordCount,
     characters: hasTranscript ? transcriptChars : extracted.totalCharacters,
     isDurationApproximate,
-  })
+  });
 }
 
 export async function streamSummaryForVisiblePage({
@@ -153,24 +152,24 @@ export async function streamSummaryForVisiblePage({
   mediaCache,
   overrides,
 }: {
-  env: Record<string, string | undefined>
-  fetchImpl: typeof fetch
-  input: VisiblePageInput
-  modelOverride: string | null
-  promptOverride: string | null
-  lengthRaw: unknown
-  languageRaw: unknown
-  format?: 'text' | 'markdown'
-  sink: StreamSink
-  cache: CacheState
-  mediaCache: MediaCache | null
-  overrides: RunOverrides
+  env: Record<string, string | undefined>;
+  fetchImpl: typeof fetch;
+  input: VisiblePageInput;
+  modelOverride: string | null;
+  promptOverride: string | null;
+  lengthRaw: unknown;
+  languageRaw: unknown;
+  format?: "text" | "markdown";
+  sink: StreamSink;
+  cache: CacheState;
+  mediaCache: MediaCache | null;
+  overrides: RunOverrides;
 }): Promise<{ usedModel: string; metrics: VisiblePageMetrics }> {
-  const startedAt = Date.now()
-  let usedModel: string | null = null
-  let summaryFromCache = false
+  const startedAt = Date.now();
+  let usedModel: string | null = null;
+  let summaryFromCache = false;
 
-  const writeStatus = typeof sink.writeStatus === 'function' ? sink.writeStatus : null
+  const writeStatus = typeof sink.writeStatus === "function" ? sink.writeStatus : null;
 
   const ctx = createDaemonUrlFlowContext({
     env,
@@ -186,17 +185,17 @@ export async function streamSummaryForVisiblePage({
     overrides,
     hooks: {
       onModelChosen: (modelId) => {
-        usedModel = modelId
-        sink.onModelChosen(modelId)
+        usedModel = modelId;
+        sink.onModelChosen(modelId);
       },
       onSummaryCached: (cached) => {
-        summaryFromCache = cached
-        sink.writeMeta?.({ summaryFromCache: cached })
+        summaryFromCache = cached;
+        sink.writeMeta?.({ summaryFromCache: cached });
       },
     },
     runStartedAtMs: startedAt,
     stdoutSink: { writeChunk: sink.writeChunk },
-  })
+  });
 
   const extracted: ExtractedLinkContent = {
     url: input.url,
@@ -219,12 +218,12 @@ export async function streamSummaryForVisiblePage({
     video: null,
     isVideoOnly: false,
     diagnostics: {
-      strategy: 'html',
+      strategy: "html",
       firecrawl: {
         attempted: false,
         used: false,
         cacheMode: cache.mode,
-        cacheStatus: 'unknown',
+        cacheStatus: "unknown",
       },
       markdown: {
         requested: false,
@@ -233,13 +232,13 @@ export async function streamSummaryForVisiblePage({
       },
       transcript: {
         cacheMode: cache.mode,
-        cacheStatus: 'unknown',
+        cacheStatus: "unknown",
         textProvided: false,
         provider: null,
         attemptedProviders: [],
       },
-    } satisfies ExtractedLinkContent['diagnostics'],
-  }
+    } satisfies ExtractedLinkContent["diagnostics"],
+  };
 
   sink.writeMeta?.({
     inputSummary: formatInputSummary({
@@ -248,10 +247,10 @@ export async function streamSummaryForVisiblePage({
       words: extracted.wordCount,
       characters: extracted.totalCharacters,
     }),
-  })
-  writeStatus?.('Summarizing…')
+  });
+  writeStatus?.("Summarizing…");
 
-  const extractionUi = deriveExtractionUi(extracted)
+  const extractionUi = deriveExtractionUi(extracted);
   const prompt = buildUrlPrompt({
     extracted,
     outputLanguage: ctx.flags.outputLanguage,
@@ -259,7 +258,7 @@ export async function streamSummaryForVisiblePage({
     promptOverride: ctx.flags.promptOverride ?? null,
     lengthInstruction: ctx.flags.lengthInstruction ?? null,
     languageInstruction: ctx.flags.languageInstruction ?? null,
-  })
+  });
 
   await summarizeExtractedUrl({
     ctx,
@@ -267,17 +266,17 @@ export async function streamSummaryForVisiblePage({
     extracted,
     extractionUi,
     prompt,
-    effectiveMarkdownMode: 'off',
+    effectiveMarkdownMode: "off",
     transcriptionCostLabel: null,
     onModelChosen: ctx.hooks.onModelChosen ?? null,
-  })
+  });
 
-  const report = await ctx.hooks.buildReport()
-  const costUsd = await ctx.hooks.estimateCostUsd()
-  const elapsedMs = Date.now() - startedAt
+  const report = await ctx.hooks.buildReport();
+  const costUsd = await ctx.hooks.estimateCostUsd();
+  const elapsedMs = Date.now() - startedAt;
 
-  const label = extracted.siteName ?? guessSiteName(extracted.url)
-  const modelLabel = usedModel ?? ctx.model.requestedModelLabel
+  const label = extracted.siteName ?? guessSiteName(extracted.url);
+  const modelLabel = usedModel ?? ctx.model.requestedModelLabel;
   return {
     usedModel: modelLabel,
     metrics: buildDaemonMetrics({
@@ -290,7 +289,7 @@ export async function streamSummaryForVisiblePage({
       compactExtraParts: null,
       detailedExtraParts: null,
     }),
-  }
+  };
 }
 
 export async function streamSummaryForUrl({
@@ -309,42 +308,42 @@ export async function streamSummaryForUrl({
   slides,
   hooks,
 }: {
-  env: Record<string, string | undefined>
-  fetchImpl: typeof fetch
-  input: UrlModeInput
-  modelOverride: string | null
-  promptOverride: string | null
-  lengthRaw: unknown
-  languageRaw: unknown
-  format?: 'text' | 'markdown'
-  sink: StreamSink
-  cache: CacheState
-  mediaCache: MediaCache | null
-  overrides: RunOverrides
-  slides?: SlideSettings | null
+  env: Record<string, string | undefined>;
+  fetchImpl: typeof fetch;
+  input: UrlModeInput;
+  modelOverride: string | null;
+  promptOverride: string | null;
+  lengthRaw: unknown;
+  languageRaw: unknown;
+  format?: "text" | "markdown";
+  sink: StreamSink;
+  cache: CacheState;
+  mediaCache: MediaCache | null;
+  overrides: RunOverrides;
+  slides?: SlideSettings | null;
   hooks?: {
-    onExtracted?: ((extracted: ExtractedLinkContent) => void) | null
-    onSlidesExtracted?: ((slides: SlideExtractionResult) => void) | null
-    onSlidesProgress?: ((text: string) => void) | null
-    onSlidesDone?: ((result: { ok: boolean; error?: string | null }) => void) | null
+    onExtracted?: ((extracted: ExtractedLinkContent) => void) | null;
+    onSlidesExtracted?: ((slides: SlideExtractionResult) => void) | null;
+    onSlidesProgress?: ((text: string) => void) | null;
+    onSlidesDone?: ((result: { ok: boolean; error?: string | null }) => void) | null;
     onSlideChunk?: (chunk: {
-      slide: SlideImage
+      slide: SlideImage;
       meta: {
-        slidesDir: string
-        sourceUrl: string
-        sourceId: string
-        sourceKind: SlideSourceKind
-        ocrAvailable: boolean
-      }
-    }) => void
-  } | null
+        slidesDir: string;
+        sourceUrl: string;
+        sourceId: string;
+        sourceKind: SlideSourceKind;
+        ocrAvailable: boolean;
+      };
+    }) => void;
+  } | null;
 }): Promise<{ usedModel: string; metrics: VisiblePageMetrics }> {
-  const startedAt = Date.now()
-  let usedModel: string | null = null
-  let summaryFromCache = false
-  const extractedRef = { value: null as ExtractedLinkContent | null }
+  const startedAt = Date.now();
+  let usedModel: string | null = null;
+  let summaryFromCache = false;
+  const extractedRef = { value: null as ExtractedLinkContent | null };
 
-  const writeStatus = typeof sink.writeStatus === 'function' ? sink.writeStatus : null
+  const writeStatus = typeof sink.writeStatus === "function" ? sink.writeStatus : null;
 
   const ctx = createDaemonUrlFlowContext({
     env,
@@ -362,57 +361,57 @@ export async function streamSummaryForUrl({
     slides,
     hooks: {
       onModelChosen: (modelId) => {
-        usedModel = modelId
-        sink.onModelChosen(modelId)
+        usedModel = modelId;
+        sink.onModelChosen(modelId);
       },
       onExtracted: (content) => {
-        extractedRef.value = content
-        hooks?.onExtracted?.(content)
-        sink.writeMeta?.({ inputSummary: buildInputSummaryForExtracted(content) })
-        writeStatus?.('Summarizing…')
+        extractedRef.value = content;
+        hooks?.onExtracted?.(content);
+        sink.writeMeta?.({ inputSummary: buildInputSummaryForExtracted(content) });
+        writeStatus?.("Summarizing…");
       },
       onSlidesExtracted: (result) => {
-        hooks?.onSlidesExtracted?.(result)
+        hooks?.onSlidesExtracted?.(result);
       },
       onSlidesDone: (result) => {
-        hooks?.onSlidesDone?.(result)
+        hooks?.onSlidesDone?.(result);
       },
       onSlideChunk: hooks?.onSlideChunk ?? undefined,
       onSlidesProgress: (text: string) => {
-        const trimmed = typeof text === 'string' ? text.trim() : ''
-        if (!trimmed) return
-        hooks?.onSlidesProgress?.(trimmed)
-        writeStatus?.(trimmed)
+        const trimmed = typeof text === "string" ? text.trim() : "";
+        if (!trimmed) return;
+        hooks?.onSlidesProgress?.(trimmed);
+        writeStatus?.(trimmed);
       },
       onLinkPreviewProgress: (event) => {
-        const msg = formatProgress(event)
-        if (msg) writeStatus?.(msg)
+        const msg = formatProgress(event);
+        if (msg) writeStatus?.(msg);
       },
       onSummaryCached: (cached) => {
-        summaryFromCache = cached
-        sink.writeMeta?.({ summaryFromCache: cached })
+        summaryFromCache = cached;
+        sink.writeMeta?.({ summaryFromCache: cached });
       },
     },
     runStartedAtMs: startedAt,
     stdoutSink: { writeChunk: sink.writeChunk },
-  })
+  });
 
-  writeStatus?.('Extracting…')
-  await runUrlFlow({ ctx, url: input.url, isYoutubeUrl: isYouTubeUrl(input.url) })
+  writeStatus?.("Extracting…");
+  await runUrlFlow({ ctx, url: input.url, isYoutubeUrl: isYouTubeUrl(input.url) });
 
-  const extracted = extractedRef.value
+  const extracted = extractedRef.value;
   if (!extracted) {
-    throw new Error('Internal error: missing extracted content')
+    throw new Error("Internal error: missing extracted content");
   }
 
-  const report = await ctx.hooks.buildReport()
-  const costUsd = await ctx.hooks.estimateCostUsd()
-  const elapsedMs = Date.now() - startedAt
+  const report = await ctx.hooks.buildReport();
+  const costUsd = await ctx.hooks.estimateCostUsd();
+  const elapsedMs = Date.now() - startedAt;
 
-  const label = extracted.siteName ?? guessSiteName(extracted.url)
-  const modelLabel = usedModel ?? ctx.model.requestedModelLabel
-  const compactExtraParts = buildLengthPartsForFinishLine(extracted, false)
-  const detailedExtraParts = buildLengthPartsForFinishLine(extracted, true)
+  const label = extracted.siteName ?? guessSiteName(extracted.url);
+  const modelLabel = usedModel ?? ctx.model.requestedModelLabel;
+  const compactExtraParts = buildLengthPartsForFinishLine(extracted, false);
+  const detailedExtraParts = buildLengthPartsForFinishLine(extracted, true);
 
   return {
     usedModel: modelLabel,
@@ -426,7 +425,7 @@ export async function streamSummaryForUrl({
       compactExtraParts,
       detailedExtraParts,
     }),
-  }
+  };
 }
 
 export async function extractContentForUrl({
@@ -440,20 +439,20 @@ export async function extractContentForUrl({
   slides,
   hooks,
 }: {
-  env: Record<string, string | undefined>
-  fetchImpl: typeof fetch
-  input: UrlModeInput
-  cache: CacheState
-  mediaCache: MediaCache | null
-  overrides: RunOverrides
-  format?: 'text' | 'markdown'
-  slides?: SlideSettings | null
+  env: Record<string, string | undefined>;
+  fetchImpl: typeof fetch;
+  input: UrlModeInput;
+  cache: CacheState;
+  mediaCache: MediaCache | null;
+  overrides: RunOverrides;
+  format?: "text" | "markdown";
+  slides?: SlideSettings | null;
   hooks?: {
-    onSlidesExtracted?: ((slides: SlideExtractionResult) => void) | null
-  } | null
+    onSlidesExtracted?: ((slides: SlideExtractionResult) => void) | null;
+  } | null;
 }): Promise<{ extracted: ExtractedLinkContent; slides: SlideExtractionResult | null }> {
-  const extractedRef = { value: null as ExtractedLinkContent | null }
-  const slidesRef = { value: null as SlideExtractionResult | null }
+  const extractedRef = { value: null as ExtractedLinkContent | null };
+  const slidesRef = { value: null as SlideExtractionResult | null };
 
   const ctx = createDaemonUrlFlowContext({
     env,
@@ -462,8 +461,8 @@ export async function extractContentForUrl({
     mediaCache,
     modelOverride: null,
     promptOverride: null,
-    lengthRaw: '',
-    languageRaw: '',
+    lengthRaw: "",
+    languageRaw: "",
     maxExtractCharacters:
       input.maxCharacters && input.maxCharacters > 0 ? input.maxCharacters : null,
     format,
@@ -472,23 +471,23 @@ export async function extractContentForUrl({
     slides,
     hooks: {
       onExtracted: (content) => {
-        extractedRef.value = content
+        extractedRef.value = content;
       },
       onSlidesExtracted: (result) => {
-        slidesRef.value = result
-        hooks?.onSlidesExtracted?.(result)
+        slidesRef.value = result;
+        hooks?.onSlidesExtracted?.(result);
       },
     },
     runStartedAtMs: Date.now(),
     stdoutSink: { writeChunk: () => {} },
-  })
+  });
 
-  await runUrlFlow({ ctx, url: input.url, isYoutubeUrl: isYouTubeUrl(input.url) })
+  await runUrlFlow({ ctx, url: input.url, isYoutubeUrl: isYouTubeUrl(input.url) });
 
-  const extracted = extractedRef.value
+  const extracted = extractedRef.value;
   if (!extracted) {
-    throw new Error('Internal error: missing extracted content')
+    throw new Error("Internal error: missing extracted content");
   }
 
-  return { extracted, slides: slidesRef.value }
+  return { extracted, slides: slidesRef.value };
 }

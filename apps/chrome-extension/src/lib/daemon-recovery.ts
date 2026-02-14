@@ -1,54 +1,54 @@
 type RecoveryCheck = {
-  isReady: boolean
-  currentUrlMatches: boolean
-  isIdle: boolean
-}
+  isReady: boolean;
+  currentUrlMatches: boolean;
+  isIdle: boolean;
+};
 
 export function createDaemonRecovery() {
-  let lastReady: boolean | null = null
-  let pendingUrl: string | null = null
+  let lastReady: boolean | null = null;
+  let pendingUrl: string | null = null;
 
   return {
     recordFailure(url: string) {
-      lastReady = false
-      pendingUrl = url
+      lastReady = false;
+      pendingUrl = url;
     },
     getPendingUrl() {
-      return pendingUrl
+      return pendingUrl;
     },
     clearPending() {
-      pendingUrl = null
+      pendingUrl = null;
     },
     updateStatus(isReady: boolean) {
-      lastReady = isReady
+      lastReady = isReady;
     },
     maybeRecover({ isReady, currentUrlMatches, isIdle }: RecoveryCheck) {
-      const prev = lastReady
-      lastReady = isReady
+      const prev = lastReady;
+      lastReady = isReady;
 
-      if (!pendingUrl) return false
+      if (!pendingUrl) return false;
 
       if (!currentUrlMatches) {
-        pendingUrl = null
-        return false
+        pendingUrl = null;
+        return false;
       }
 
       if (prev === false && isReady && isIdle) {
-        pendingUrl = null
-        return true
+        pendingUrl = null;
+        return true;
       }
 
-      return false
+      return false;
     },
-  }
+  };
 }
 
 export function isDaemonUnreachableError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err)
-  const normalized = message.toLowerCase()
+  const message = err instanceof Error ? err.message : String(err);
+  const normalized = message.toLowerCase();
   return (
-    normalized.includes('failed to fetch') ||
-    normalized.includes('networkerror') ||
-    normalized.includes('econnrefused')
-  )
+    normalized.includes("failed to fetch") ||
+    normalized.includes("networkerror") ||
+    normalized.includes("econnrefused")
+  );
 }

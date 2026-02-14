@@ -4,45 +4,45 @@ import type {
   AssistantMessageEvent,
   Provider,
   StopReason,
-} from '@mariozechner/pi-ai'
+} from "@mariozechner/pi-ai";
 
 type UsageOverrides = Partial<{
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  totalTokens: number
-}>
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+}>;
 
 export function makeAssistantMessage({
-  text = 'OK',
-  provider = 'openai',
-  model = 'gpt-5.2',
-  api = 'openai-responses',
+  text = "OK",
+  provider = "openai",
+  model = "gpt-5.2",
+  api = "openai-responses",
   usage,
-  stopReason = 'stop',
+  stopReason = "stop",
 }: {
-  text?: string
-  provider?: Provider
-  model?: string
-  api?: Api
-  usage?: UsageOverrides
-  stopReason?: StopReason
+  text?: string;
+  provider?: Provider;
+  model?: string;
+  api?: Api;
+  usage?: UsageOverrides;
+  stopReason?: StopReason;
 }): AssistantMessage {
-  const input = usage?.input ?? 1
-  const output = usage?.output ?? 1
-  const cacheRead = usage?.cacheRead ?? 0
-  const cacheWrite = usage?.cacheWrite ?? 0
-  const totalTokens = usage?.totalTokens ?? input + output + cacheRead + cacheWrite
+  const input = usage?.input ?? 1;
+  const output = usage?.output ?? 1;
+  const cacheRead = usage?.cacheRead ?? 0;
+  const cacheWrite = usage?.cacheWrite ?? 0;
+  const totalTokens = usage?.totalTokens ?? input + output + cacheRead + cacheWrite;
 
   return {
-    role: 'assistant' as const,
+    role: "assistant" as const,
     api,
     provider,
     model,
     stopReason,
     timestamp: Date.now(),
-    content: [{ type: 'text' as const, text }],
+    content: [{ type: "text" as const, text }],
     usage: {
       input,
       output,
@@ -51,7 +51,7 @@ export function makeAssistantMessage({
       totalTokens,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     },
-  }
+  };
 }
 
 export function makeTextDeltaStream(
@@ -60,34 +60,34 @@ export function makeTextDeltaStream(
   {
     error,
   }: {
-    error?: unknown
-  } = {}
+    error?: unknown;
+  } = {},
 ) {
   const stream = {
     async *[Symbol.asyncIterator]() {
       for (const delta of deltas) {
         yield {
-          type: 'text_delta' as const,
+          type: "text_delta" as const,
           contentIndex: 0,
           delta,
           partial: finalMessage,
-        }
+        };
       }
       if (error) {
         yield {
-          type: 'error' as const,
-          reason: 'error' as const,
+          type: "error" as const,
+          reason: "error" as const,
           error: error as unknown as AssistantMessage,
-        }
-        return
+        };
+        return;
       }
-      yield { type: 'done' as const, reason: 'stop' as const, message: finalMessage }
+      yield { type: "done" as const, reason: "stop" as const, message: finalMessage };
     },
     async result() {
-      if (error) throw error
-      return finalMessage
+      if (error) throw error;
+      return finalMessage;
     },
-  } satisfies AsyncIterable<AssistantMessageEvent> & { result: () => Promise<AssistantMessage> }
+  } satisfies AsyncIterable<AssistantMessageEvent> & { result: () => Promise<AssistantMessage> };
 
-  return stream
+  return stream;
 }

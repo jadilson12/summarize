@@ -1,6 +1,16 @@
-import path from 'node:path'
-import { countTokens } from 'gpt-tokenizer'
-import { render as renderMarkdownAnsi } from 'markdansi'
+import { countTokens } from "gpt-tokenizer";
+import { render as renderMarkdownAnsi } from "markdansi";
+import path from "node:path";
+import type { CliProvider, SummarizeConfig } from "../../../config.js";
+import type { MediaCache } from "../../../content/index.js";
+import type { LlmCall, RunMetricsReport } from "../../../costs.js";
+import type { OutputLanguage } from "../../../language.js";
+import type { Prompt } from "../../../llm/prompt.js";
+import type { ExecFileFn } from "../../../markitdown.js";
+import type { FixedModelSpec, RequestedModel } from "../../../model-spec.js";
+import type { SummaryLength } from "../../../shared/contracts.js";
+import type { createSummaryEngine } from "../../summary-engine.js";
+import type { ModelAttempt } from "../../types.js";
 import {
   buildLanguageKey,
   buildLengthKey,
@@ -10,72 +20,62 @@ import {
   extractTaggedBlock,
   hashString,
   normalizeContentForHash,
-} from '../../../cache.js'
-import type { CliProvider, SummarizeConfig } from '../../../config.js'
-import type { MediaCache } from '../../../content/index.js'
-import type { LlmCall, RunMetricsReport } from '../../../costs.js'
-import type { OutputLanguage } from '../../../language.js'
-import { formatOutputLanguageForJson } from '../../../language.js'
-import { parseGatewayStyleModelId } from '../../../llm/model-id.js'
-import type { Prompt } from '../../../llm/prompt.js'
-import type { ExecFileFn } from '../../../markitdown.js'
-import { buildAutoModelAttempts } from '../../../model-auto.js'
-import type { FixedModelSpec, RequestedModel } from '../../../model-spec.js'
+} from "../../../cache.js";
+import { formatOutputLanguageForJson } from "../../../language.js";
+import { parseGatewayStyleModelId } from "../../../llm/model-id.js";
+import { buildAutoModelAttempts } from "../../../model-auto.js";
 import {
   buildPathSummaryPrompt,
   SUMMARY_LENGTH_TARGET_CHARACTERS,
   SUMMARY_SYSTEM_PROMPT,
-} from '../../../prompts/index.js'
-import type { SummaryLength } from '../../../shared/contracts.js'
+} from "../../../prompts/index.js";
 import {
   type AssetAttachment,
   ensureCliAttachmentPath,
   isUnsupportedAttachmentError,
-} from '../../attachments.js'
+} from "../../attachments.js";
 import {
   readLastSuccessfulCliProvider,
   writeLastSuccessfulCliProvider,
-} from '../../cli-fallback-state.js'
-import { parseCliUserModelId } from '../../env.js'
-import { writeFinishLine } from '../../finish-line.js'
-import { resolveTargetCharacters } from '../../format.js'
-import { writeVerbose } from '../../logging.js'
-import { prepareMarkdownForTerminal } from '../../markdown.js'
-import { runModelAttempts } from '../../model-attempts.js'
-import { buildOpenRouterNoAllowedProvidersMessage } from '../../openrouter.js'
-import type { createSummaryEngine } from '../../summary-engine.js'
-import { isRichTty, markdownRenderWidth, supportsColor } from '../../terminal.js'
-import type { ModelAttempt } from '../../types.js'
-import { prepareAssetPrompt } from './preprocess.js'
+} from "../../cli-fallback-state.js";
+import { parseCliUserModelId } from "../../env.js";
+import { writeFinishLine } from "../../finish-line.js";
+import { resolveTargetCharacters } from "../../format.js";
+import { writeVerbose } from "../../logging.js";
+import { prepareMarkdownForTerminal } from "../../markdown.js";
+import { runModelAttempts } from "../../model-attempts.js";
+import { buildOpenRouterNoAllowedProvidersMessage } from "../../openrouter.js";
+import { isRichTty, markdownRenderWidth, supportsColor } from "../../terminal.js";
+import { prepareAssetPrompt } from "./preprocess.js";
 
 const buildModelMetaFromAttempt = (attempt: ModelAttempt) => {
-  if (attempt.transport === 'cli') {
-    return { provider: 'cli' as const, canonical: attempt.userModelId }
+  if (attempt.transport === "cli") {
+    return { provider: "cli" as const, canonical: attempt.userModelId };
   }
-  const parsed = parseGatewayStyleModelId(attempt.llmModelId ?? attempt.userModelId)
-  const canonical = attempt.userModelId.toLowerCase().startsWith('openrouter/')
+  const parsed = parseGatewayStyleModelId(attempt.llmModelId ?? attempt.userModelId);
+  const canonical = attempt.userModelId.toLowerCase().startsWith("openrouter/")
     ? attempt.userModelId
-    : parsed.canonical
-  return { provider: parsed.provider, canonical }
-}
+    : parsed.canonical;
+  return { provider: parsed.provider, canonical };
+};
 
 function shouldBypassShortContentSummary({
   ctx,
   textContent,
 }: {
-  ctx: Pick<AssetSummaryContext, 'forceSummary' | 'lengthArg' | 'maxOutputTokensArg' | 'json'>
-  textContent: { content: string } | null
+  ctx: Pick<AssetSummaryContext, "forceSummary" | "lengthArg" | "maxOutputTokensArg" | "json">;
+  textContent: { content: string } | null;
 }): boolean {
-  if (ctx.forceSummary) return false
-  if (!textContent?.content) return false
-  const targetCharacters = resolveTargetCharacters(ctx.lengthArg, SUMMARY_LENGTH_TARGET_CHARACTERS)
-  if (!Number.isFinite(targetCharacters) || targetCharacters <= 0) return false
-  if (textContent.content.length > targetCharacters) return false
-  if (!ctx.json && typeof ctx.maxOutputTokensArg === 'number') {
-    const tokenCount = countTokens(textContent.content)
-    if (tokenCount > ctx.maxOutputTokensArg) return false
+  if (ctx.forceSummary) return false;
+  if (!textContent?.content) return false;
+  const targetCharacters = resolveTargetCharacters(ctx.lengthArg, SUMMARY_LENGTH_TARGET_CHARACTERS);
+  if (!Number.isFinite(targetCharacters) || targetCharacters <= 0) return false;
+  if (textContent.content.length > targetCharacters) return false;
+  if (!ctx.json && typeof ctx.maxOutputTokensArg === "number") {
+    const tokenCount = countTokens(textContent.content);
+    if (tokenCount > ctx.maxOutputTokensArg) return false;
   }
-  return true
+  return true;
 }
 
 async function outputBypassedAssetSummary({
@@ -86,50 +86,50 @@ async function outputBypassedAssetSummary({
   assetFooterParts,
   footerLabel,
 }: {
-  ctx: AssetSummaryContext
-  args: SummarizeAssetArgs
-  promptText: string
-  summaryText: string
-  assetFooterParts: string[]
-  footerLabel: string
+  ctx: AssetSummaryContext;
+  args: SummarizeAssetArgs;
+  promptText: string;
+  summaryText: string;
+  assetFooterParts: string[];
+  footerLabel: string;
 }) {
-  const summary = summaryText.trimEnd()
+  const summary = summaryText.trimEnd();
   const extracted = {
-    kind: 'asset' as const,
+    kind: "asset" as const,
     source: args.sourceLabel,
     mediaType: args.attachment.mediaType,
     filename: args.attachment.filename,
-  }
+  };
 
   if (ctx.json) {
-    ctx.clearProgressForStdout()
-    const finishReport = ctx.shouldComputeReport ? await ctx.buildReport() : null
+    ctx.clearProgressForStdout();
+    const finishReport = ctx.shouldComputeReport ? await ctx.buildReport() : null;
     const input =
-      args.sourceKind === 'file'
+      args.sourceKind === "file"
         ? {
-            kind: 'file',
+            kind: "file",
             filePath: args.sourceLabel,
             timeoutMs: ctx.timeoutMs,
             length:
-              ctx.lengthArg.kind === 'preset'
-                ? { kind: 'preset', preset: ctx.lengthArg.preset }
-                : { kind: 'chars', maxCharacters: ctx.lengthArg.maxCharacters },
+              ctx.lengthArg.kind === "preset"
+                ? { kind: "preset", preset: ctx.lengthArg.preset }
+                : { kind: "chars", maxCharacters: ctx.lengthArg.maxCharacters },
             maxOutputTokens: ctx.maxOutputTokensArg,
             model: ctx.requestedModelLabel,
             language: formatOutputLanguageForJson(ctx.outputLanguage),
           }
         : {
-            kind: 'asset-url',
+            kind: "asset-url",
             url: args.sourceLabel,
             timeoutMs: ctx.timeoutMs,
             length:
-              ctx.lengthArg.kind === 'preset'
-                ? { kind: 'preset', preset: ctx.lengthArg.preset }
-                : { kind: 'chars', maxCharacters: ctx.lengthArg.maxCharacters },
+              ctx.lengthArg.kind === "preset"
+                ? { kind: "preset", preset: ctx.lengthArg.preset }
+                : { kind: "chars", maxCharacters: ctx.lengthArg.maxCharacters },
             maxOutputTokens: ctx.maxOutputTokensArg,
             model: ctx.requestedModelLabel,
             language: formatOutputLanguageForJson(ctx.outputLanguage),
-          }
+          };
     const payload = {
       input,
       env: {
@@ -146,11 +146,11 @@ async function outputBypassedAssetSummary({
       llm: null,
       metrics: ctx.metricsEnabled ? finishReport : null,
       summary,
-    }
-    ctx.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
-    ctx.restoreProgressAfterStdout?.()
+    };
+    ctx.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    ctx.restoreProgressAfterStdout?.();
     if (ctx.metricsEnabled && finishReport) {
-      const costUsd = await ctx.estimateCostUsd()
+      const costUsd = await ctx.estimateCostUsd();
       writeFinishLine({
         stderr: ctx.stderr,
         env: ctx.envForRun,
@@ -162,12 +162,12 @@ async function outputBypassedAssetSummary({
         detailed: ctx.metricsDetailed,
         extraParts: null,
         color: ctx.verboseColor,
-      })
+      });
     }
-    return
+    return;
   }
 
-  ctx.clearProgressForStdout()
+  ctx.clearProgressForStdout();
   const rendered =
     !ctx.plain && isRichTty(ctx.stdout)
       ? renderMarkdownAnsi(prepareMarkdownForTerminal(summary), {
@@ -176,25 +176,25 @@ async function outputBypassedAssetSummary({
           color: supportsColor(ctx.stdout, ctx.envForRun),
           hyperlinks: true,
         })
-      : summary
+      : summary;
 
   if (!ctx.plain && isRichTty(ctx.stdout)) {
-    ctx.stdout.write(`\n${rendered.replace(/^\n+/, '')}`)
+    ctx.stdout.write(`\n${rendered.replace(/^\n+/, "")}`);
   } else {
-    if (isRichTty(ctx.stdout)) ctx.stdout.write('\n')
-    ctx.stdout.write(rendered.replace(/^\n+/, ''))
+    if (isRichTty(ctx.stdout)) ctx.stdout.write("\n");
+    ctx.stdout.write(rendered.replace(/^\n+/, ""));
   }
-  if (!rendered.endsWith('\n')) {
-    ctx.stdout.write('\n')
+  if (!rendered.endsWith("\n")) {
+    ctx.stdout.write("\n");
   }
-  ctx.restoreProgressAfterStdout?.()
+  ctx.restoreProgressAfterStdout?.();
   if (assetFooterParts.length > 0) {
-    ctx.writeViaFooter([...assetFooterParts, footerLabel])
+    ctx.writeViaFooter([...assetFooterParts, footerLabel]);
   }
 
-  const report = ctx.shouldComputeReport ? await ctx.buildReport() : null
+  const report = ctx.shouldComputeReport ? await ctx.buildReport() : null;
   if (ctx.metricsEnabled && report) {
-    const costUsd = await ctx.estimateCostUsd()
+    const costUsd = await ctx.estimateCostUsd();
     writeFinishLine({
       stderr: ctx.stderr,
       env: ctx.envForRun,
@@ -206,94 +206,94 @@ async function outputBypassedAssetSummary({
       detailed: ctx.metricsDetailed,
       extraParts: null,
       color: ctx.verboseColor,
-    })
+    });
   }
 }
 
 export type AssetSummaryContext = {
-  env: Record<string, string | undefined>
-  envForRun: Record<string, string | undefined>
-  stdout: NodeJS.WritableStream
-  stderr: NodeJS.WritableStream
-  execFileImpl: ExecFileFn
-  timeoutMs: number
-  preprocessMode: 'off' | 'auto' | 'always'
-  format: 'text' | 'markdown'
-  extractMode: boolean
-  lengthArg: { kind: 'preset'; preset: SummaryLength } | { kind: 'chars'; maxCharacters: number }
-  forceSummary: boolean
-  outputLanguage: OutputLanguage
-  videoMode: 'auto' | 'transcript' | 'understand'
-  fixedModelSpec: FixedModelSpec | null
-  promptOverride?: string | null
-  lengthInstruction?: string | null
-  languageInstruction?: string | null
-  isFallbackModel: boolean
-  isImplicitAutoSelection: boolean
-  allowAutoCliFallback: boolean
-  desiredOutputTokens: number | null
-  envForAuto: Record<string, string | undefined>
-  configForModelSelection: SummarizeConfig | null
-  cliAvailability: Partial<Record<CliProvider, boolean>>
-  requestedModel: RequestedModel
-  requestedModelInput: string
-  requestedModelLabel: string
-  wantsFreeNamedModel: boolean
-  isNamedModelSelection: boolean
-  maxOutputTokensArg: number | null
-  json: boolean
-  metricsEnabled: boolean
-  metricsDetailed: boolean
-  shouldComputeReport: boolean
-  runStartedAtMs: number
-  verbose: boolean
-  verboseColor: boolean
-  streamingEnabled: boolean
-  plain: boolean
-  summaryEngine: ReturnType<typeof createSummaryEngine>
-  trackedFetch: typeof fetch
-  writeViaFooter: (parts: string[]) => void
-  clearProgressForStdout: () => void
-  restoreProgressAfterStdout?: (() => void) | null
+  env: Record<string, string | undefined>;
+  envForRun: Record<string, string | undefined>;
+  stdout: NodeJS.WritableStream;
+  stderr: NodeJS.WritableStream;
+  execFileImpl: ExecFileFn;
+  timeoutMs: number;
+  preprocessMode: "off" | "auto" | "always";
+  format: "text" | "markdown";
+  extractMode: boolean;
+  lengthArg: { kind: "preset"; preset: SummaryLength } | { kind: "chars"; maxCharacters: number };
+  forceSummary: boolean;
+  outputLanguage: OutputLanguage;
+  videoMode: "auto" | "transcript" | "understand";
+  fixedModelSpec: FixedModelSpec | null;
+  promptOverride?: string | null;
+  lengthInstruction?: string | null;
+  languageInstruction?: string | null;
+  isFallbackModel: boolean;
+  isImplicitAutoSelection: boolean;
+  allowAutoCliFallback: boolean;
+  desiredOutputTokens: number | null;
+  envForAuto: Record<string, string | undefined>;
+  configForModelSelection: SummarizeConfig | null;
+  cliAvailability: Partial<Record<CliProvider, boolean>>;
+  requestedModel: RequestedModel;
+  requestedModelInput: string;
+  requestedModelLabel: string;
+  wantsFreeNamedModel: boolean;
+  isNamedModelSelection: boolean;
+  maxOutputTokensArg: number | null;
+  json: boolean;
+  metricsEnabled: boolean;
+  metricsDetailed: boolean;
+  shouldComputeReport: boolean;
+  runStartedAtMs: number;
+  verbose: boolean;
+  verboseColor: boolean;
+  streamingEnabled: boolean;
+  plain: boolean;
+  summaryEngine: ReturnType<typeof createSummaryEngine>;
+  trackedFetch: typeof fetch;
+  writeViaFooter: (parts: string[]) => void;
+  clearProgressForStdout: () => void;
+  restoreProgressAfterStdout?: (() => void) | null;
   getLiteLlmCatalog: () => Promise<
-    Awaited<ReturnType<typeof import('../../../pricing/litellm.js').loadLiteLlmCatalog>>['catalog']
-  >
-  buildReport: () => Promise<RunMetricsReport>
-  estimateCostUsd: () => Promise<number | null>
-  llmCalls: LlmCall[]
-  cache: CacheState
-  summaryCacheBypass: boolean
-  mediaCache: MediaCache | null
+    Awaited<ReturnType<typeof import("../../../pricing/litellm.js").loadLiteLlmCatalog>>["catalog"]
+  >;
+  buildReport: () => Promise<RunMetricsReport>;
+  estimateCostUsd: () => Promise<number | null>;
+  llmCalls: LlmCall[];
+  cache: CacheState;
+  summaryCacheBypass: boolean;
+  mediaCache: MediaCache | null;
   apiStatus: {
-    xaiApiKey: string | null
-    apiKey: string | null
-    openrouterApiKey: string | null
-    apifyToken: string | null
-    firecrawlConfigured: boolean
-    googleConfigured: boolean
-    anthropicConfigured: boolean
+    xaiApiKey: string | null;
+    apiKey: string | null;
+    openrouterApiKey: string | null;
+    apifyToken: string | null;
+    firecrawlConfigured: boolean;
+    googleConfigured: boolean;
+    anthropicConfigured: boolean;
     providerBaseUrls: {
-      openai: string | null
-      anthropic: string | null
-      google: string | null
-      xai: string | null
-    }
-    zaiApiKey: string | null
-    zaiBaseUrl: string
-  }
-}
+      openai: string | null;
+      anthropic: string | null;
+      google: string | null;
+      xai: string | null;
+    };
+    zaiApiKey: string | null;
+    zaiBaseUrl: string;
+  };
+};
 
 export type SummarizeAssetArgs = {
-  sourceKind: 'file' | 'asset-url'
-  sourceLabel: string
-  attachment: AssetAttachment
-  onModelChosen?: ((modelId: string) => void) | null
-}
+  sourceKind: "file" | "asset-url";
+  sourceLabel: string;
+  attachment: AssetAttachment;
+  onModelChosen?: ((modelId: string) => void) | null;
+};
 
 export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAssetArgs) {
   const lastSuccessfulCliProvider = ctx.isFallbackModel
     ? await readLastSuccessfulCliProvider(ctx.envForRun)
-    : null
+    : null;
 
   const { promptText, attachments, assetFooterParts, textContent } = await prepareAssetPrompt({
     ctx: {
@@ -311,28 +311,28 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
       languageInstruction: ctx.languageInstruction ?? null,
     },
     attachment: args.attachment,
-  })
+  });
   const prompt: Prompt = {
     system: SUMMARY_SYSTEM_PROMPT,
     userText: promptText,
     ...(attachments.length > 0 ? { attachments } : {}),
-  }
+  };
 
   const summaryLengthTarget =
-    ctx.lengthArg.kind === 'preset'
+    ctx.lengthArg.kind === "preset"
       ? ctx.lengthArg.preset
-      : { maxCharacters: ctx.lengthArg.maxCharacters }
+      : { maxCharacters: ctx.lengthArg.maxCharacters };
 
-  const promptTokensForAuto = attachments.length === 0 ? countTokens(prompt.userText) : null
-  const lowerMediaType = args.attachment.mediaType.toLowerCase()
-  const kind = lowerMediaType.startsWith('video/')
-    ? ('video' as const)
-    : lowerMediaType.startsWith('image/')
-      ? ('image' as const)
+  const promptTokensForAuto = attachments.length === 0 ? countTokens(prompt.userText) : null;
+  const lowerMediaType = args.attachment.mediaType.toLowerCase();
+  const kind = lowerMediaType.startsWith("video/")
+    ? ("video" as const)
+    : lowerMediaType.startsWith("image/")
+      ? ("image" as const)
       : textContent
-        ? ('text' as const)
-        : ('file' as const)
-  const requiresVideoUnderstanding = kind === 'video' && ctx.videoMode !== 'transcript'
+        ? ("text" as const)
+        : ("file" as const);
+  const requiresVideoUnderstanding = kind === "video" && ctx.videoMode !== "transcript";
 
   if (
     ctx.isFallbackModel &&
@@ -343,34 +343,34 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
       ctx,
       args,
       promptText,
-      summaryText: textContent?.content ?? '',
+      summaryText: textContent?.content ?? "",
       assetFooterParts,
-      footerLabel: 'short content',
-    })
-    return
+      footerLabel: "short content",
+    });
+    return;
   }
 
   if (
-    ctx.requestedModel.kind === 'auto' &&
+    ctx.requestedModel.kind === "auto" &&
     !ctx.isNamedModelSelection &&
     !ctx.forceSummary &&
     !ctx.json &&
-    typeof ctx.maxOutputTokensArg === 'number' &&
+    typeof ctx.maxOutputTokensArg === "number" &&
     textContent &&
     countTokens(textContent.content) <= ctx.maxOutputTokensArg
   ) {
-    ctx.clearProgressForStdout()
-    ctx.stdout.write(`${textContent.content.trim()}\n`)
-    ctx.restoreProgressAfterStdout?.()
+    ctx.clearProgressForStdout();
+    ctx.stdout.write(`${textContent.content.trim()}\n`);
+    ctx.restoreProgressAfterStdout?.();
     if (assetFooterParts.length > 0) {
-      ctx.writeViaFooter([...assetFooterParts, 'no model'])
+      ctx.writeViaFooter([...assetFooterParts, "no model"]);
     }
-    return
+    return;
   }
 
   const attempts: ModelAttempt[] = await (async () => {
     if (ctx.isFallbackModel) {
-      const catalog = await ctx.getLiteLlmCatalog()
+      const catalog = await ctx.getLiteLlmCatalog();
       const all = buildAutoModelAttempts({
         kind,
         promptTokens: promptTokensForAuto,
@@ -384,23 +384,23 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
         isImplicitAutoSelection: ctx.isImplicitAutoSelection,
         allowAutoCliFallback: ctx.allowAutoCliFallback,
         lastSuccessfulCliProvider,
-      })
+      });
       const mapped: ModelAttempt[] = all.map((attempt) => {
-        if (attempt.transport !== 'cli')
-          return ctx.summaryEngine.applyZaiOverrides(attempt as ModelAttempt)
-        const parsed = parseCliUserModelId(attempt.userModelId)
-        return { ...attempt, cliProvider: parsed.provider, cliModel: parsed.model }
-      })
-      return mapped
+        if (attempt.transport !== "cli")
+          return ctx.summaryEngine.applyZaiOverrides(attempt as ModelAttempt);
+        const parsed = parseCliUserModelId(attempt.userModelId);
+        return { ...attempt, cliProvider: parsed.provider, cliModel: parsed.model };
+      });
+      return mapped;
     }
     /* v8 ignore next */
     if (!ctx.fixedModelSpec) {
-      throw new Error('Internal error: missing fixed model spec')
+      throw new Error("Internal error: missing fixed model spec");
     }
-    if (ctx.fixedModelSpec.transport === 'cli') {
+    if (ctx.fixedModelSpec.transport === "cli") {
       return [
         {
-          transport: 'cli',
+          transport: "cli",
           userModelId: ctx.fixedModelSpec.userModelId,
           llmModelId: null,
           cliProvider: ctx.fixedModelSpec.cliProvider,
@@ -409,19 +409,19 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
           forceOpenRouter: false,
           requiredEnv: ctx.fixedModelSpec.requiredEnv,
         },
-      ]
+      ];
     }
     const openaiOverrides =
-      ctx.fixedModelSpec.requiredEnv === 'Z_AI_API_KEY'
+      ctx.fixedModelSpec.requiredEnv === "Z_AI_API_KEY"
         ? {
             openaiApiKeyOverride: ctx.apiStatus.zaiApiKey,
             openaiBaseUrlOverride: ctx.apiStatus.zaiBaseUrl,
             forceChatCompletions: true,
           }
-        : {}
+        : {};
     return [
       {
-        transport: ctx.fixedModelSpec.transport === 'openrouter' ? 'openrouter' : 'native',
+        transport: ctx.fixedModelSpec.transport === "openrouter" ? "openrouter" : "native",
         userModelId: ctx.fixedModelSpec.userModelId,
         llmModelId: ctx.fixedModelSpec.llmModelId,
         openrouterProviders: ctx.fixedModelSpec.openrouterProviders,
@@ -429,27 +429,27 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
         requiredEnv: ctx.fixedModelSpec.requiredEnv,
         ...openaiOverrides,
       },
-    ]
-  })()
+    ];
+  })();
 
   const cliContext = await (async () => {
-    if (!attempts.some((a) => a.transport === 'cli')) return null
-    if (attachments.length === 0) return null
-    const needsPathPrompt = args.attachment.kind === 'image' || args.attachment.kind === 'file'
-    if (!needsPathPrompt) return null
+    if (!attempts.some((a) => a.transport === "cli")) return null;
+    if (attachments.length === 0) return null;
+    const needsPathPrompt = args.attachment.kind === "image" || args.attachment.kind === "file";
+    if (!needsPathPrompt) return null;
     const filePath = await ensureCliAttachmentPath({
       sourceKind: args.sourceKind,
       sourceLabel: args.sourceLabel,
       attachment: args.attachment,
-    })
-    const dir = path.dirname(filePath)
+    });
+    const dir = path.dirname(filePath);
     const extraArgsByProvider: Partial<Record<CliProvider, string[]>> = {
-      gemini: ['--include-directories', dir],
-      codex: args.attachment.kind === 'image' ? ['-i', filePath] : undefined,
-    }
+      gemini: ["--include-directories", dir],
+      codex: args.attachment.kind === "image" ? ["-i", filePath] : undefined,
+    };
     return {
       promptOverride: buildPathSummaryPrompt({
-        kindLabel: args.attachment.kind === 'image' ? 'image' : 'file',
+        kindLabel: args.attachment.kind === "image" ? "image" : "file",
         filePath,
         filename: args.attachment.filename,
         mediaType: args.attachment.mediaType,
@@ -462,58 +462,58 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
       allowTools: true,
       cwd: dir,
       extraArgsByProvider,
-    }
-  })()
+    };
+  })();
 
   const cacheStore =
-    ctx.cache.mode === 'default' && !ctx.summaryCacheBypass ? ctx.cache.store : null
-  const contentBlock = extractTaggedBlock(promptText, 'content')
+    ctx.cache.mode === "default" && !ctx.summaryCacheBypass ? ctx.cache.store : null;
+  const contentBlock = extractTaggedBlock(promptText, "content");
   const contentHash =
     cacheStore && contentBlock && contentBlock.trim().length > 0
       ? hashString(normalizeContentForHash(contentBlock))
-      : null
-  const promptHash = cacheStore ? buildPromptHash(promptText) : null
-  const lengthKey = buildLengthKey(ctx.lengthArg)
-  const languageKey = buildLanguageKey(ctx.outputLanguage)
+      : null;
+  const promptHash = cacheStore ? buildPromptHash(promptText) : null;
+  const lengthKey = buildLengthKey(ctx.lengthArg);
+  const languageKey = buildLanguageKey(ctx.outputLanguage);
 
-  let summaryResult: Awaited<ReturnType<typeof ctx.summaryEngine.runSummaryAttempt>> | null = null
-  let usedAttempt: ModelAttempt | null = null
-  let summaryFromCache = false
-  let cacheChecked = false
+  let summaryResult: Awaited<ReturnType<typeof ctx.summaryEngine.runSummaryAttempt>> | null = null;
+  let usedAttempt: ModelAttempt | null = null;
+  let summaryFromCache = false;
+  let cacheChecked = false;
 
   if (cacheStore && contentHash && promptHash) {
-    cacheChecked = true
+    cacheChecked = true;
     for (const attempt of attempts) {
-      if (!ctx.summaryEngine.envHasKeyFor(attempt.requiredEnv)) continue
+      if (!ctx.summaryEngine.envHasKeyFor(attempt.requiredEnv)) continue;
       const key = buildSummaryCacheKey({
         contentHash,
         promptHash,
         model: attempt.userModelId,
         lengthKey,
         languageKey,
-      })
-      const cached = cacheStore.getText('summary', key)
-      if (!cached) continue
-      writeVerbose(ctx.stderr, ctx.verbose, 'cache hit summary', ctx.verboseColor, ctx.envForRun)
-      args.onModelChosen?.(attempt.userModelId)
+      });
+      const cached = cacheStore.getText("summary", key);
+      if (!cached) continue;
+      writeVerbose(ctx.stderr, ctx.verbose, "cache hit summary", ctx.verboseColor, ctx.envForRun);
+      args.onModelChosen?.(attempt.userModelId);
       summaryResult = {
         summary: cached,
         summaryAlreadyPrinted: false,
         modelMeta: buildModelMetaFromAttempt(attempt),
         maxOutputTokensForCall: null,
-      }
-      usedAttempt = attempt
-      summaryFromCache = true
-      break
+      };
+      usedAttempt = attempt;
+      summaryFromCache = true;
+      break;
     }
   }
   if (cacheChecked && !summaryFromCache) {
-    writeVerbose(ctx.stderr, ctx.verbose, 'cache miss summary', ctx.verboseColor, ctx.envForRun)
+    writeVerbose(ctx.stderr, ctx.verbose, "cache miss summary", ctx.verboseColor, ctx.envForRun);
   }
 
-  let lastError: unknown = null
-  let missingRequiredEnvs = new Set<ModelAttempt['requiredEnv']>()
-  let sawOpenRouterNoAllowedProviders = false
+  let lastError: unknown = null;
+  let missingRequiredEnvs = new Set<ModelAttempt["requiredEnv"]>();
+  let sawOpenRouterNoAllowedProviders = false;
 
   if (!summaryResult || !usedAttempt) {
     const attemptOutcome = await runModelAttempts({
@@ -528,8 +528,8 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
           ctx.verbose,
           `auto skip ${attempt.userModelId}: missing ${attempt.requiredEnv}`,
           ctx.verboseColor,
-          ctx.envForRun
-        )
+          ctx.envForRun,
+        );
       },
       onAutoFailure: (attempt, error) => {
         writeVerbose(
@@ -539,17 +539,17 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
             error instanceof Error ? error.message : String(error)
           }`,
           ctx.verboseColor,
-          ctx.envForRun
-        )
+          ctx.envForRun,
+        );
       },
       onFixedModelError: (attempt, error) => {
         if (isUnsupportedAttachmentError(error)) {
           throw new Error(
             `Model ${attempt.userModelId} does not support attaching files of type ${args.attachment.mediaType}. Try a different --model.`,
-            { cause: error }
-          )
+            { cause: error },
+          );
         }
-        throw error
+        throw error;
       },
       runAttempt: (attempt) =>
         ctx.summaryEngine.runSummaryAttempt({
@@ -559,30 +559,30 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
           onModelChosen: args.onModelChosen ?? null,
           cli: cliContext,
         }),
-    })
-    summaryResult = attemptOutcome.result
-    usedAttempt = attemptOutcome.usedAttempt
-    lastError = attemptOutcome.lastError
-    missingRequiredEnvs = attemptOutcome.missingRequiredEnvs
-    sawOpenRouterNoAllowedProviders = attemptOutcome.sawOpenRouterNoAllowedProviders
+    });
+    summaryResult = attemptOutcome.result;
+    usedAttempt = attemptOutcome.usedAttempt;
+    lastError = attemptOutcome.lastError;
+    missingRequiredEnvs = attemptOutcome.missingRequiredEnvs;
+    sawOpenRouterNoAllowedProviders = attemptOutcome.sawOpenRouterNoAllowedProviders;
   }
 
   if (!summaryResult || !usedAttempt) {
     const withFreeTip = (message: string) => {
-      if (!ctx.isNamedModelSelection || !ctx.wantsFreeNamedModel) return message
+      if (!ctx.isNamedModelSelection || !ctx.wantsFreeNamedModel) return message;
       return (
         `${message}\n` +
         `Tip: run "summarize refresh-free" to refresh the free model candidates (writes ~/.summarize/config.json).`
-      )
-    }
+      );
+    };
 
     if (ctx.isNamedModelSelection) {
       if (lastError === null && missingRequiredEnvs.size > 0) {
         throw new Error(
           withFreeTip(
-            `Missing ${Array.from(missingRequiredEnvs).sort().join(', ')} for --model ${ctx.requestedModelInput}.`
-          )
-        )
+            `Missing ${Array.from(missingRequiredEnvs).sort().join(", ")} for --model ${ctx.requestedModelInput}.`,
+          ),
+        );
       }
       if (lastError instanceof Error) {
         if (sawOpenRouterNoAllowedProviders) {
@@ -590,24 +590,24 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
             attempts,
             fetchImpl: ctx.trackedFetch,
             timeoutMs: ctx.timeoutMs,
-          })
-          throw new Error(withFreeTip(message), { cause: lastError })
+          });
+          throw new Error(withFreeTip(message), { cause: lastError });
         }
-        throw new Error(withFreeTip(lastError.message), { cause: lastError })
+        throw new Error(withFreeTip(lastError.message), { cause: lastError });
       }
-      throw new Error(withFreeTip(`No model available for --model ${ctx.requestedModelInput}`))
+      throw new Error(withFreeTip(`No model available for --model ${ctx.requestedModelInput}`));
     }
     if (textContent) {
-      ctx.clearProgressForStdout()
-      ctx.stdout.write(`${textContent.content.trim()}\n`)
-      ctx.restoreProgressAfterStdout?.()
+      ctx.clearProgressForStdout();
+      ctx.stdout.write(`${textContent.content.trim()}\n`);
+      ctx.restoreProgressAfterStdout?.();
       if (assetFooterParts.length > 0) {
-        ctx.writeViaFooter([...assetFooterParts, 'no model'])
+        ctx.writeViaFooter([...assetFooterParts, "no model"]);
       }
-      return
+      return;
     }
-    if (lastError instanceof Error) throw lastError
-    throw new Error('No model available for this input')
+    if (lastError instanceof Error) throw lastError;
+    throw new Error("No model available for this input");
   }
 
   if (!summaryFromCache && cacheStore && contentHash && promptHash) {
@@ -617,69 +617,69 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
       model: usedAttempt.userModelId,
       lengthKey,
       languageKey,
-    })
-    cacheStore.setText('summary', key, summaryResult.summary, ctx.cache.ttlMs)
-    writeVerbose(ctx.stderr, ctx.verbose, 'cache write summary', ctx.verboseColor, ctx.envForRun)
+    });
+    cacheStore.setText("summary", key, summaryResult.summary, ctx.cache.ttlMs);
+    writeVerbose(ctx.stderr, ctx.verbose, "cache write summary", ctx.verboseColor, ctx.envForRun);
   }
   if (
     !summaryFromCache &&
     ctx.isFallbackModel &&
-    usedAttempt.transport === 'cli' &&
+    usedAttempt.transport === "cli" &&
     usedAttempt.cliProvider
   ) {
     await writeLastSuccessfulCliProvider({
       env: ctx.envForRun,
       provider: usedAttempt.cliProvider,
-    })
+    });
   }
 
-  const { summary, summaryAlreadyPrinted, modelMeta, maxOutputTokensForCall } = summaryResult
+  const { summary, summaryAlreadyPrinted, modelMeta, maxOutputTokensForCall } = summaryResult;
 
   const extracted = {
-    kind: 'asset' as const,
+    kind: "asset" as const,
     source: args.sourceLabel,
     mediaType: args.attachment.mediaType,
     filename: args.attachment.filename,
-  }
+  };
 
   if (ctx.json) {
-    ctx.clearProgressForStdout()
-    const finishReport = ctx.shouldComputeReport ? await ctx.buildReport() : null
+    ctx.clearProgressForStdout();
+    const finishReport = ctx.shouldComputeReport ? await ctx.buildReport() : null;
     const input: {
-      kind: 'file' | 'asset-url'
-      filePath?: string
-      url?: string
-      timeoutMs: number
-      length: { kind: 'preset'; preset: string } | { kind: 'chars'; maxCharacters: number }
-      maxOutputTokens: number | null
-      model: string
-      language: ReturnType<typeof formatOutputLanguageForJson>
+      kind: "file" | "asset-url";
+      filePath?: string;
+      url?: string;
+      timeoutMs: number;
+      length: { kind: "preset"; preset: string } | { kind: "chars"; maxCharacters: number };
+      maxOutputTokens: number | null;
+      model: string;
+      language: ReturnType<typeof formatOutputLanguageForJson>;
     } =
-      args.sourceKind === 'file'
+      args.sourceKind === "file"
         ? {
-            kind: 'file',
+            kind: "file",
             filePath: args.sourceLabel,
             timeoutMs: ctx.timeoutMs,
             length:
-              ctx.lengthArg.kind === 'preset'
-                ? { kind: 'preset', preset: ctx.lengthArg.preset }
-                : { kind: 'chars', maxCharacters: ctx.lengthArg.maxCharacters },
+              ctx.lengthArg.kind === "preset"
+                ? { kind: "preset", preset: ctx.lengthArg.preset }
+                : { kind: "chars", maxCharacters: ctx.lengthArg.maxCharacters },
             maxOutputTokens: ctx.maxOutputTokensArg,
             model: ctx.requestedModelLabel,
             language: formatOutputLanguageForJson(ctx.outputLanguage),
           }
         : {
-            kind: 'asset-url',
+            kind: "asset-url",
             url: args.sourceLabel,
             timeoutMs: ctx.timeoutMs,
             length:
-              ctx.lengthArg.kind === 'preset'
-                ? { kind: 'preset', preset: ctx.lengthArg.preset }
-                : { kind: 'chars', maxCharacters: ctx.lengthArg.maxCharacters },
+              ctx.lengthArg.kind === "preset"
+                ? { kind: "preset", preset: ctx.lengthArg.preset }
+                : { kind: "chars", maxCharacters: ctx.lengthArg.maxCharacters },
             maxOutputTokens: ctx.maxOutputTokensArg,
             model: ctx.requestedModelLabel,
             language: formatOutputLanguageForJson(ctx.outputLanguage),
-          }
+          };
     const payload = {
       input,
       env: {
@@ -697,33 +697,33 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
         provider: modelMeta.provider,
         model: usedAttempt.userModelId,
         maxCompletionTokens: maxOutputTokensForCall,
-        strategy: 'single' as const,
+        strategy: "single" as const,
       },
       metrics: ctx.metricsEnabled ? finishReport : null,
       summary,
-    }
-    ctx.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
-    ctx.restoreProgressAfterStdout?.()
+    };
+    ctx.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    ctx.restoreProgressAfterStdout?.();
     if (ctx.metricsEnabled && finishReport) {
-      const costUsd = await ctx.estimateCostUsd()
+      const costUsd = await ctx.estimateCostUsd();
       writeFinishLine({
         stderr: ctx.stderr,
         env: ctx.envForRun,
         elapsedMs: Date.now() - ctx.runStartedAtMs,
-        elapsedLabel: summaryFromCache ? 'Cached' : null,
+        elapsedLabel: summaryFromCache ? "Cached" : null,
         model: usedAttempt.userModelId,
         report: finishReport,
         costUsd,
         detailed: ctx.metricsDetailed,
         extraParts: null,
         color: ctx.verboseColor,
-      })
+      });
     }
-    return
+    return;
   }
 
   if (!summaryAlreadyPrinted) {
-    ctx.clearProgressForStdout()
+    ctx.clearProgressForStdout();
     const rendered =
       !ctx.plain && isRichTty(ctx.stdout)
         ? renderMarkdownAnsi(prepareMarkdownForTerminal(summary), {
@@ -732,36 +732,36 @@ export async function summarizeAsset(ctx: AssetSummaryContext, args: SummarizeAs
             color: supportsColor(ctx.stdout, ctx.envForRun),
             hyperlinks: true,
           })
-        : summary
+        : summary;
 
     if (!ctx.plain && isRichTty(ctx.stdout)) {
-      ctx.stdout.write(`\n${rendered.replace(/^\n+/, '')}`)
+      ctx.stdout.write(`\n${rendered.replace(/^\n+/, "")}`);
     } else {
-      if (isRichTty(ctx.stdout)) ctx.stdout.write('\n')
-      ctx.stdout.write(rendered.replace(/^\n+/, ''))
+      if (isRichTty(ctx.stdout)) ctx.stdout.write("\n");
+      ctx.stdout.write(rendered.replace(/^\n+/, ""));
     }
-    if (!rendered.endsWith('\n')) {
-      ctx.stdout.write('\n')
+    if (!rendered.endsWith("\n")) {
+      ctx.stdout.write("\n");
     }
-    ctx.restoreProgressAfterStdout?.()
+    ctx.restoreProgressAfterStdout?.();
   }
 
-  ctx.writeViaFooter([...assetFooterParts, `model ${usedAttempt.userModelId}`])
+  ctx.writeViaFooter([...assetFooterParts, `model ${usedAttempt.userModelId}`]);
 
-  const report = ctx.shouldComputeReport ? await ctx.buildReport() : null
+  const report = ctx.shouldComputeReport ? await ctx.buildReport() : null;
   if (ctx.metricsEnabled && report) {
-    const costUsd = await ctx.estimateCostUsd()
+    const costUsd = await ctx.estimateCostUsd();
     writeFinishLine({
       stderr: ctx.stderr,
       env: ctx.envForRun,
       elapsedMs: Date.now() - ctx.runStartedAtMs,
-      elapsedLabel: summaryFromCache ? 'Cached' : null,
+      elapsedLabel: summaryFromCache ? "Cached" : null,
       model: usedAttempt.userModelId,
       report,
       costUsd,
       detailed: ctx.metricsDetailed,
       extraParts: null,
       color: ctx.verboseColor,
-    })
+    });
   }
 }

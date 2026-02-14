@@ -1,12 +1,12 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig, devices } from "@playwright/test";
 
-const headless = process.env.HEADLESS !== '0'
+const headless = process.env.HEADLESS !== "0";
 
 export default defineConfig({
-  testDir: './tests',
+  testDir: "./tests",
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  reporter: 'list',
+  reporter: "list",
   fullyParallel: false,
   workers: 1,
   use: {
@@ -16,12 +16,12 @@ export default defineConfig({
   // Multi-browser testing support
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
     },
     {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      name: "firefox",
+      use: { ...devices["Desktop Firefox"] },
     },
   ],
-})
+});

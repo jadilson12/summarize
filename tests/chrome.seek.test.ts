@@ -1,50 +1,49 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from "vitest";
+import { seekToSecondsInDocument } from "../apps/chrome-extension/src/lib/seek";
 
-import { seekToSecondsInDocument } from '../apps/chrome-extension/src/lib/seek'
-
-describe('seekToSecondsInDocument', () => {
-  it('seeks and plays HTML media elements', () => {
-    let currentTime = 0
-    const play = vi.fn().mockResolvedValue(undefined)
+describe("seekToSecondsInDocument", () => {
+  it("seeks and plays HTML media elements", () => {
+    let currentTime = 0;
+    const play = vi.fn().mockResolvedValue(undefined);
     const video = {
       get currentTime() {
-        return currentTime
+        return currentTime;
       },
       set currentTime(value: number) {
-        currentTime = value
+        currentTime = value;
       },
       play,
-    } as unknown as HTMLVideoElement
+    } as unknown as HTMLVideoElement;
     const doc = {
       querySelector: () => video,
       getElementById: () => null,
-    } as unknown as Document
+    } as unknown as Document;
 
-    const result = seekToSecondsInDocument(doc, 42)
+    const result = seekToSecondsInDocument(doc, 42);
 
-    expect(result).toEqual({ ok: true })
-    expect(currentTime).toBe(42)
-    expect(play).toHaveBeenCalled()
-  })
+    expect(result).toEqual({ ok: true });
+    expect(currentTime).toBe(42);
+    expect(play).toHaveBeenCalled();
+  });
 
-  it('seeks and plays YouTube player when present', () => {
+  it("seeks and plays YouTube player when present", () => {
     const player = {} as HTMLElement & {
-      seekTo?: (time: number, allowSeekAhead?: boolean) => void
-      playVideo?: () => void
-    }
-    const seekTo = vi.fn()
-    const playVideo = vi.fn()
-    player.seekTo = seekTo
-    player.playVideo = playVideo
+      seekTo?: (time: number, allowSeekAhead?: boolean) => void;
+      playVideo?: () => void;
+    };
+    const seekTo = vi.fn();
+    const playVideo = vi.fn();
+    player.seekTo = seekTo;
+    player.playVideo = playVideo;
     const doc = {
       querySelector: () => null,
       getElementById: () => player,
-    } as unknown as Document
+    } as unknown as Document;
 
-    const result = seekToSecondsInDocument(doc, 12)
+    const result = seekToSecondsInDocument(doc, 12);
 
-    expect(result).toEqual({ ok: true })
-    expect(seekTo).toHaveBeenCalledWith(12, true)
-    expect(playVideo).toHaveBeenCalled()
-  })
-})
+    expect(result).toEqual({ ok: true });
+    expect(seekTo).toHaveBeenCalledWith(12, true);
+    expect(playVideo).toHaveBeenCalled();
+  });
+});

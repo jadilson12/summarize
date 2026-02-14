@@ -1,111 +1,110 @@
-import { Writable } from 'node:stream'
-
-import type { CacheState } from '../cache.js'
-import type { SummarizeConfig } from '../config.js'
+import { Writable } from "node:stream";
+import type { CacheState } from "../cache.js";
+import type { SummarizeConfig } from "../config.js";
 import type {
   ExtractedLinkContent,
   LinkPreviewProgressEvent,
   MediaCache,
-} from '../content/index.js'
-import type { ExecFileFn } from '../markitdown.js'
-import type { FixedModelSpec } from '../model-spec.js'
-import { execFileTracked } from '../processes.js'
-import type { AssetSummaryContext, SummarizeAssetArgs } from '../run/flows/asset/summary.js'
-import { summarizeAsset as summarizeAssetFlow } from '../run/flows/asset/summary.js'
-import type { UrlFlowContext } from '../run/flows/url/types.js'
-import { resolveRunContextState } from '../run/run-context.js'
-import { createRunMetrics } from '../run/run-metrics.js'
-import { resolveModelSelection } from '../run/run-models.js'
-import { resolveDesiredOutputTokens } from '../run/run-output.js'
+} from "../content/index.js";
+import type { ExecFileFn } from "../markitdown.js";
+import type { FixedModelSpec } from "../model-spec.js";
+import type { AssetSummaryContext, SummarizeAssetArgs } from "../run/flows/asset/summary.js";
+import type { UrlFlowContext } from "../run/flows/url/types.js";
+import type { SlideImage, SlideSettings, SlideSourceKind } from "../slides/index.js";
+import { execFileTracked } from "../processes.js";
+import { summarizeAsset as summarizeAssetFlow } from "../run/flows/asset/summary.js";
+import { resolveRunContextState } from "../run/run-context.js";
+import { createRunMetrics } from "../run/run-metrics.js";
+import { resolveModelSelection } from "../run/run-models.js";
+import { resolveDesiredOutputTokens } from "../run/run-output.js";
 import {
   type RunOverrides,
   resolveOutputLanguageSetting,
   resolveSummaryLength,
-} from '../run/run-settings.js'
-import { createSummaryEngine } from '../run/summary-engine.js'
-import type { SlideImage, SlideSettings, SlideSourceKind } from '../slides/index.js'
+} from "../run/run-settings.js";
+import { createSummaryEngine } from "../run/summary-engine.js";
 
 type TextSink = {
-  writeChunk: (text: string) => void
-}
+  writeChunk: (text: string) => void;
+};
 
 function createWritableFromTextSink(sink: TextSink): NodeJS.WritableStream {
   const stream = new Writable({
     write(chunk, _encoding, callback) {
       const text =
-        typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString('utf8') : ''
-      if (text) sink.writeChunk(text)
-      callback()
+        typeof chunk === "string" ? chunk : Buffer.isBuffer(chunk) ? chunk.toString("utf8") : "";
+      if (text) sink.writeChunk(text);
+      callback();
     },
-  })
-  ;(stream as unknown as { isTTY?: boolean }).isTTY = false
-  return stream
+  });
+  (stream as unknown as { isTTY?: boolean }).isTTY = false;
+  return stream;
 }
 
 function applyAutoCliFallbackOverrides(
   config: SummarizeConfig | null,
-  overrides: RunOverrides
+  overrides: RunOverrides,
 ): SummarizeConfig | null {
-  const hasOverride = overrides.autoCliFallbackEnabled !== null || overrides.autoCliOrder !== null
-  if (!hasOverride) return config
-  const current = config ?? {}
-  const currentCli = current.cli ?? {}
-  const currentAutoFallback = currentCli.autoFallback ?? currentCli.magicAuto ?? {}
+  const hasOverride = overrides.autoCliFallbackEnabled !== null || overrides.autoCliOrder !== null;
+  if (!hasOverride) return config;
+  const current = config ?? {};
+  const currentCli = current.cli ?? {};
+  const currentAutoFallback = currentCli.autoFallback ?? currentCli.magicAuto ?? {};
   return {
     ...current,
     cli: {
       ...currentCli,
       autoFallback: {
         ...currentAutoFallback,
-        ...(typeof overrides.autoCliFallbackEnabled === 'boolean'
+        ...(typeof overrides.autoCliFallbackEnabled === "boolean"
           ? { enabled: overrides.autoCliFallbackEnabled }
           : {}),
         ...(Array.isArray(overrides.autoCliOrder) ? { order: overrides.autoCliOrder } : {}),
       },
     },
-  }
+  };
 }
 
 export type DaemonUrlFlowContextArgs = {
-  env: Record<string, string | undefined>
-  fetchImpl: typeof fetch
-  cache: CacheState
-  mediaCache?: MediaCache | null
-  modelOverride: string | null
-  promptOverride: string | null
-  lengthRaw: unknown
-  languageRaw: unknown
-  maxExtractCharacters: number | null
-  format?: 'text' | 'markdown'
-  overrides?: RunOverrides | null
-  extractOnly?: boolean
-  slides?: SlideSettings | null
+  env: Record<string, string | undefined>;
+  fetchImpl: typeof fetch;
+  cache: CacheState;
+  mediaCache?: MediaCache | null;
+  modelOverride: string | null;
+  promptOverride: string | null;
+  lengthRaw: unknown;
+  languageRaw: unknown;
+  maxExtractCharacters: number | null;
+  format?: "text" | "markdown";
+  overrides?: RunOverrides | null;
+  extractOnly?: boolean;
+  slides?: SlideSettings | null;
   hooks?: {
-    onModelChosen?: ((modelId: string) => void) | null
-    onExtracted?: ((extracted: ExtractedLinkContent) => void) | null
+    onModelChosen?: ((modelId: string) => void) | null;
+    onExtracted?: ((extracted: ExtractedLinkContent) => void) | null;
     onSlidesExtracted?:
       | ((
-          slides: Awaited<ReturnType<typeof import('../slides/index.js').extractSlidesForSource>>
+          slides: Awaited<ReturnType<typeof import("../slides/index.js").extractSlidesForSource>>,
         ) => void)
-      | null
-    onSlidesProgress?: ((text: string) => void) | null
-    onSlidesDone?: ((result: { ok: boolean; error?: string | null }) => void) | null
+      | null;
+    onSlidesProgress?: ((text: string) => void) | null;
+    onSlidesDone?: ((result: { ok: boolean; error?: string | null }) => void) | null;
     onSlideChunk?: (chunk: {
-      slide: SlideImage
+      slide: SlideImage;
       meta: {
-        slidesDir: string
-        sourceUrl: string
-        sourceId: string
-        sourceKind: SlideSourceKind
-        ocrAvailable: boolean
-      }
-    }) => void
-    onLinkPreviewProgress?: ((event: LinkPreviewProgressEvent) => void) | null
-    onSummaryCached?: ((cached: boolean) => void) | null
-  } | null
-  runStartedAtMs: number
-  stdoutSink: TextSink
-}
+        slidesDir: string;
+        sourceUrl: string;
+        sourceId: string;
+        sourceKind: SlideSourceKind;
+        ocrAvailable: boolean;
+      };
+    }) => void;
+    onLinkPreviewProgress?: ((event: LinkPreviewProgressEvent) => void) | null;
+    onSummaryCached?: ((cached: boolean) => void) | null;
+  } | null;
+  runStartedAtMs: number;
+  stdoutSink: TextSink;
+};
 
 export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlFlowContext {
   const {
@@ -125,13 +124,13 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     hooks,
     runStartedAtMs,
     stdoutSink,
-  } = args
+  } = args;
 
-  const envForRun: Record<string, string | undefined> = { ...env }
+  const envForRun: Record<string, string | undefined> = { ...env };
 
-  const languageExplicitlySet = typeof languageRaw === 'string' && Boolean(languageRaw.trim())
+  const languageExplicitlySet = typeof languageRaw === "string" && Boolean(languageRaw.trim());
 
-  const { lengthArg } = resolveSummaryLength(lengthRaw)
+  const { lengthArg } = resolveSummaryLength(lengthRaw);
   const resolvedOverrides: RunOverrides = overrides ?? {
     firecrawlMode: null,
     markdownMode: null,
@@ -146,12 +145,12 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     transcriber: null,
     autoCliFallbackEnabled: null,
     autoCliOrder: null,
-  }
+  };
   if (resolvedOverrides.transcriber) {
-    envForRun.SUMMARIZE_TRANSCRIBER = resolvedOverrides.transcriber
+    envForRun.SUMMARIZE_TRANSCRIBER = resolvedOverrides.transcriber;
   }
-  const videoModeOverride = resolvedOverrides.videoMode
-  const resolvedFormat = format === 'markdown' ? 'markdown' : 'text'
+  const videoModeOverride = resolvedOverrides.videoMode;
+  const resolvedFormat = format === "markdown" ? "markdown" : "text";
 
   const {
     config,
@@ -187,14 +186,14 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
   } = resolveRunContextState({
     env: envForRun,
     envForRun,
-    programOpts: { videoMode: videoModeOverride ?? 'auto' },
+    programOpts: { videoMode: videoModeOverride ?? "auto" },
     languageExplicitlySet,
     videoModeExplicitlySet: videoModeOverride != null,
     cliFlagPresent: false,
     cliProviderArg: null,
-  })
-  const configForCliWithMagic = applyAutoCliFallbackOverrides(configForCli, resolvedOverrides)
-  const allowAutoCliFallback = resolvedOverrides.autoCliFallbackEnabled === true
+  });
+  const configForCliWithMagic = applyAutoCliFallbackOverrides(configForCli, resolvedOverrides);
+  const allowAutoCliFallback = resolvedOverrides.autoCliFallbackEnabled === true;
 
   const {
     requestedModel,
@@ -211,25 +210,25 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     configPath,
     envForRun,
     explicitModelArg: modelOverride?.trim() ? modelOverride.trim() : null,
-  })
+  });
 
   const fixedModelSpec: FixedModelSpec | null =
-    requestedModel.kind === 'fixed' ? requestedModel : null
-  const maxOutputTokensArg = resolvedOverrides.maxOutputTokensArg
-  const desiredOutputTokens = resolveDesiredOutputTokens({ lengthArg, maxOutputTokensArg })
+    requestedModel.kind === "fixed" ? requestedModel : null;
+  const maxOutputTokensArg = resolvedOverrides.maxOutputTokensArg;
+  const desiredOutputTokens = resolveDesiredOutputTokens({ lengthArg, maxOutputTokensArg });
 
-  const metrics = createRunMetrics({ env: envForRun, fetchImpl, maxOutputTokensArg })
+  const metrics = createRunMetrics({ env: envForRun, fetchImpl, maxOutputTokensArg });
 
-  const stdout = createWritableFromTextSink(stdoutSink)
-  const stderr = process.stderr
+  const stdout = createWritableFromTextSink(stdoutSink);
+  const stderr = process.stderr;
 
-  const timeoutMs = resolvedOverrides.timeoutMs ?? 120_000
-  const retries = resolvedOverrides.retries ?? 1
-  const firecrawlMode = resolvedOverrides.firecrawlMode ?? 'off'
+  const timeoutMs = resolvedOverrides.timeoutMs ?? 120_000;
+  const retries = resolvedOverrides.retries ?? 1;
+  const firecrawlMode = resolvedOverrides.firecrawlMode ?? "off";
   const markdownMode =
-    resolvedOverrides.markdownMode ?? (resolvedFormat === 'markdown' ? 'readability' : 'off')
-  const preprocessMode = resolvedOverrides.preprocessMode ?? 'auto'
-  const youtubeMode = resolvedOverrides.youtubeMode ?? 'auto'
+    resolvedOverrides.markdownMode ?? (resolvedFormat === "markdown" ? "readability" : "off");
+  const preprocessMode = resolvedOverrides.preprocessMode ?? "auto";
+  const youtubeMode = resolvedOverrides.youtubeMode ?? "auto";
 
   const summaryEngine = createSummaryEngine({
     env: envForRun,
@@ -240,7 +239,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     timeoutMs,
     retries,
     streamingEnabled: true,
-    streamingOutputMode: 'delta',
+    streamingOutputMode: "delta",
     plain: true,
     verbose: false,
     verboseColor: false,
@@ -266,25 +265,25 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     },
     zai: { apiKey: zaiApiKey, baseUrl: zaiBaseUrl },
     providerBaseUrls,
-  })
+  });
 
   const outputLanguage = resolveOutputLanguageSetting({
     raw: languageRaw,
     fallback: outputLanguageFromConfig,
-  })
+  });
 
   const lengthInstruction =
-    promptOverride && lengthArg.kind === 'chars'
+    promptOverride && lengthArg.kind === "chars"
       ? `Output is ${lengthArg.maxCharacters.toLocaleString()} characters.`
-      : null
+      : null;
   const languageExplicit =
-    typeof languageRaw === 'string' &&
+    typeof languageRaw === "string" &&
     languageRaw.trim().length > 0 &&
-    languageRaw.trim().toLowerCase() !== 'auto'
+    languageRaw.trim().toLowerCase() !== "auto";
   const languageInstruction =
-    promptOverride && languageExplicit && outputLanguage.kind === 'fixed'
+    promptOverride && languageExplicit && outputLanguage.kind === "fixed"
       ? `Output should be ${outputLanguage.label}.`
-      : null
+      : null;
 
   const assetSummaryContext: AssetSummaryContext = {
     env: envForRun,
@@ -294,7 +293,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
     execFileImpl: execFileTracked as unknown as ExecFileFn,
     timeoutMs,
     preprocessMode,
-    format: 'text',
+    format: "text",
     extractMode: extractOnly ?? false,
     lengthArg,
     forceSummary: resolvedOverrides.forceSummary ?? false,
@@ -349,7 +348,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
       zaiApiKey,
       zaiBaseUrl,
     },
-  }
+  };
 
   const ctx: UrlFlowContext = {
     io: {
@@ -388,7 +387,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
       verbose: false,
       verboseColor: false,
       progressEnabled: false,
-      streamMode: 'on',
+      streamMode: "on",
       streamingEnabled: true,
       plain: true,
       configPath,
@@ -459,7 +458,7 @@ export function createDaemonUrlFlowContext(args: DaemonUrlFlowContextArgs): UrlF
       buildReport: metrics.buildReport,
       estimateCostUsd: metrics.estimateCostUsd,
     },
-  }
+  };
 
-  return ctx
+  return ctx;
 }

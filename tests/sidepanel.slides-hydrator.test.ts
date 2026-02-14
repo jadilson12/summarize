@@ -1,165 +1,165 @@
-import { describe, expect, it } from 'vitest'
-import { createSlidesHydrator } from '../apps/chrome-extension/src/entrypoints/sidepanel/slides-hydrator.js'
-import { encodeSseEvent, type SseEvent, type SseSlidesData } from '../src/shared/sse-events.js'
+import { describe, expect, it } from "vitest";
+import { createSlidesHydrator } from "../apps/chrome-extension/src/entrypoints/sidepanel/slides-hydrator.js";
+import { encodeSseEvent, type SseEvent, type SseSlidesData } from "../src/shared/sse-events.js";
 
-const encoder = new TextEncoder()
+const encoder = new TextEncoder();
 
 function streamFromEvents(events: SseEvent[]) {
-  const payload = events.map((event) => encodeSseEvent(event)).join('')
+  const payload = events.map((event) => encodeSseEvent(event)).join("");
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      controller.enqueue(encoder.encode(payload))
-      controller.close()
+      controller.enqueue(encoder.encode(payload));
+      controller.close();
     },
-  })
+  });
 }
 
 async function waitFor(check: () => boolean, attempts = 20) {
   for (let i = 0; i < attempts; i += 1) {
-    if (check()) return
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  throw new Error('timeout waiting for condition')
+  throw new Error("timeout waiting for condition");
 }
 
-describe('sidepanel slides hydrator', () => {
-  it('hydrates snapshot when the stream finishes without slides', async () => {
+describe("sidepanel slides hydrator", () => {
+  it("hydrates snapshot when the stream finishes without slides", async () => {
     const payload: SseSlidesData = {
-      sourceUrl: 'https://example.com',
-      sourceId: 'abc',
-      sourceKind: 'youtube',
+      sourceUrl: "https://example.com",
+      sourceId: "abc",
+      sourceKind: "youtube",
       ocrAvailable: false,
       slides: [
         {
           index: 1,
           timestamp: 1.2,
-          imageUrl: 'http://127.0.0.1:8787/v1/slides/abc/1',
+          imageUrl: "http://127.0.0.1:8787/v1/slides/abc/1",
           ocrText: null,
           ocrConfidence: null,
         },
       ],
-    }
-    const received: SseSlidesData[] = []
+    };
+    const received: SseSlidesData[] = [];
 
     const hydrator = createSlidesHydrator({
-      getToken: async () => 'token',
+      getToken: async () => "token",
       onSlides: (slides) => received.push(slides),
       streamFetchImpl: async () =>
-        new Response(streamFromEvents([{ event: 'done', data: {} }]), { status: 200 }),
+        new Response(streamFromEvents([{ event: "done", data: {} }]), { status: 200 }),
       snapshotFetchImpl: async () =>
         new Response(JSON.stringify({ ok: true, slides: payload }), { status: 200 }),
-    })
+    });
 
-    await hydrator.start('run-1')
-    await waitFor(() => received.length === 1)
+    await hydrator.start("run-1");
+    await waitFor(() => received.length === 1);
 
-    expect(received).toEqual([payload])
-  })
+    expect(received).toEqual([payload]);
+  });
 
-  it('ignores snapshot results when the active run changes', async () => {
+  it("ignores snapshot results when the active run changes", async () => {
     const payload: SseSlidesData = {
-      sourceUrl: 'https://example.com',
-      sourceId: 'stale',
-      sourceKind: 'youtube',
+      sourceUrl: "https://example.com",
+      sourceId: "stale",
+      sourceKind: "youtube",
       ocrAvailable: false,
       slides: [
         {
           index: 1,
           timestamp: 2.4,
-          imageUrl: 'http://127.0.0.1:8787/v1/slides/stale/1',
+          imageUrl: "http://127.0.0.1:8787/v1/slides/stale/1",
           ocrText: null,
           ocrConfidence: null,
         },
       ],
-    }
-    let resolveSnapshot: ((value: Response) => void) | null = null
-    let snapshotRequested = false
+    };
+    let resolveSnapshot: ((value: Response) => void) | null = null;
+    let snapshotRequested = false;
     const snapshotPromise = new Promise<Response>((resolve) => {
-      resolveSnapshot = resolve
-    })
-    const received: SseSlidesData[] = []
+      resolveSnapshot = resolve;
+    });
+    const received: SseSlidesData[] = [];
     const livePayload: SseSlidesData = {
-      sourceUrl: 'https://example.com',
-      sourceId: 'live',
-      sourceKind: 'youtube',
+      sourceUrl: "https://example.com",
+      sourceId: "live",
+      sourceKind: "youtube",
       ocrAvailable: false,
       slides: [
         {
           index: 1,
           timestamp: 1,
-          imageUrl: 'http://127.0.0.1:8787/v1/slides/live/1',
+          imageUrl: "http://127.0.0.1:8787/v1/slides/live/1",
           ocrText: null,
           ocrConfidence: null,
         },
       ],
-    }
+    };
 
     const hydrator = createSlidesHydrator({
-      getToken: async () => 'token',
+      getToken: async () => "token",
       onSlides: (slides) => received.push(slides),
       streamFetchImpl: async (input) => {
-        const url = String(input)
-        if (url.includes('run-2')) {
+        const url = String(input);
+        if (url.includes("run-2")) {
           return new Response(
             streamFromEvents([
-              { event: 'slides', data: livePayload },
-              { event: 'done', data: {} },
+              { event: "slides", data: livePayload },
+              { event: "done", data: {} },
             ]),
-            { status: 200 }
-          )
+            { status: 200 },
+          );
         }
-        return new Response(streamFromEvents([{ event: 'done', data: {} }]), { status: 200 })
+        return new Response(streamFromEvents([{ event: "done", data: {} }]), { status: 200 });
       },
       snapshotFetchImpl: async () => {
-        snapshotRequested = true
-        return snapshotPromise
+        snapshotRequested = true;
+        return snapshotPromise;
       },
-    })
+    });
 
-    void hydrator.start('run-1')
-    await waitFor(() => snapshotRequested)
-    await hydrator.start('run-2')
+    void hydrator.start("run-1");
+    await waitFor(() => snapshotRequested);
+    await hydrator.start("run-2");
 
-    resolveSnapshot?.(new Response(JSON.stringify({ ok: true, slides: payload }), { status: 200 }))
-    await snapshotPromise
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    resolveSnapshot?.(new Response(JSON.stringify({ ok: true, slides: payload }), { status: 200 }));
+    await snapshotPromise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(received).toEqual([livePayload])
-  })
+    expect(received).toEqual([livePayload]);
+  });
 
-  it('hydrates snapshot when cache is loaded without slides', async () => {
+  it("hydrates snapshot when cache is loaded without slides", async () => {
     const payload: SseSlidesData = {
-      sourceUrl: 'https://example.com',
-      sourceId: 'cache',
-      sourceKind: 'youtube',
+      sourceUrl: "https://example.com",
+      sourceId: "cache",
+      sourceKind: "youtube",
       ocrAvailable: false,
       slides: [
         {
           index: 1,
           timestamp: 5,
-          imageUrl: 'http://127.0.0.1:8787/v1/slides/cache/1',
+          imageUrl: "http://127.0.0.1:8787/v1/slides/cache/1",
           ocrText: null,
           ocrConfidence: null,
         },
       ],
-    }
-    let snapshotCalls = 0
-    const received: SseSlidesData[] = []
+    };
+    let snapshotCalls = 0;
+    const received: SseSlidesData[] = [];
     const hydrator = createSlidesHydrator({
-      getToken: async () => 'token',
+      getToken: async () => "token",
       onSlides: (slides) => received.push(slides),
       streamFetchImpl: async () =>
-        new Response(streamFromEvents([{ event: 'done', data: {} }]), { status: 200 }),
+        new Response(streamFromEvents([{ event: "done", data: {} }]), { status: 200 }),
       snapshotFetchImpl: async () => {
-        snapshotCalls += 1
-        return new Response(JSON.stringify({ ok: true, slides: payload }), { status: 200 })
+        snapshotCalls += 1;
+        return new Response(JSON.stringify({ ok: true, slides: payload }), { status: 200 });
       },
-    })
+    });
 
-    hydrator.syncFromCache({ runId: 'run-cache', summaryFromCache: true, hasSlides: false })
-    await waitFor(() => received.length === 1)
+    hydrator.syncFromCache({ runId: "run-cache", summaryFromCache: true, hasSlides: false });
+    await waitFor(() => received.length === 1);
 
-    expect(snapshotCalls).toBe(1)
-    expect(received).toEqual([payload])
-  })
-})
+    expect(snapshotCalls).toBe(1);
+    expect(received).toEqual([payload]);
+  });
+});

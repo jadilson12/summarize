@@ -1,42 +1,41 @@
-import { performance } from 'node:perf_hooks'
-import { Writable } from 'node:stream'
-import { describe, expect, it } from 'vitest'
+import { performance } from "node:perf_hooks";
+import { Writable } from "node:stream";
+import { describe, expect, it } from "vitest";
+import { runCli } from "../../src/run.js";
 
-import { runCli } from '../../src/run.js'
+const LIVE = process.env.SUMMARIZE_LIVE_TEST === "1";
 
-const LIVE = process.env.SUMMARIZE_LIVE_TEST === '1'
-
-;(LIVE ? describe : describe.skip)('live mickel.tech inline CSS perf', () => {
-  it('extracts quickly (guards jsdom inline CSS slowness)', async () => {
-    let stdoutText = ''
-    let stderrText = ''
+(LIVE ? describe : describe.skip)("live mickel.tech inline CSS perf", () => {
+  it("extracts quickly (guards jsdom inline CSS slowness)", async () => {
+    let stdoutText = "";
+    let stderrText = "";
 
     const stdout = new Writable({
       write(chunk, _encoding, callback) {
-        stdoutText += chunk.toString()
-        callback()
+        stdoutText += chunk.toString();
+        callback();
       },
-    })
+    });
     const stderr = new Writable({
       write(chunk, _encoding, callback) {
-        stderrText += chunk.toString()
-        callback()
+        stderrText += chunk.toString();
+        callback();
       },
-    })
+    });
 
-    const url = 'https://mickel.tech/log/merchants-of-complexity'
-    const start = performance.now()
+    const url = "https://mickel.tech/log/merchants-of-complexity";
+    const start = performance.now();
 
     await runCli(
       [
-        '--json',
-        '--extract-only',
-        '--format',
-        'text',
-        '--firecrawl',
-        'off',
-        '--timeout',
-        '60s',
+        "--json",
+        "--extract-only",
+        "--format",
+        "text",
+        "--firecrawl",
+        "off",
+        "--timeout",
+        "60s",
         url,
       ],
       {
@@ -44,14 +43,14 @@ const LIVE = process.env.SUMMARIZE_LIVE_TEST === '1'
         fetch: globalThis.fetch.bind(globalThis),
         stdout,
         stderr,
-      }
-    )
+      },
+    );
 
-    const durationMs = performance.now() - start
-    expect(stderrText).not.toContain('Could not parse CSS stylesheet')
+    const durationMs = performance.now() - start;
+    expect(stderrText).not.toContain("Could not parse CSS stylesheet");
 
-    const parsed = JSON.parse(stdoutText) as { extracted?: { content?: string } }
-    expect(parsed.extracted?.content?.length ?? 0).toBeGreaterThan(500)
-    expect(durationMs).toBeLessThan(20_000)
-  }, 90_000)
-})
+    const parsed = JSON.parse(stdoutText) as { extracted?: { content?: string } };
+    expect(parsed.extracted?.content?.length ?? 0).toBeGreaterThan(500);
+    expect(durationMs).toBeLessThan(20_000);
+  }, 90_000);
+});

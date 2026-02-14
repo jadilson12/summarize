@@ -1,68 +1,67 @@
-import { Writable } from 'node:stream'
-import type { Api } from '@mariozechner/pi-ai'
-import { describe, expect, it, vi } from 'vitest'
+import type { Api } from "@mariozechner/pi-ai";
+import { Writable } from "node:stream";
+import { describe, expect, it, vi } from "vitest";
+import { runCli } from "../src/run.js";
+import { makeAssistantMessage } from "./helpers/pi-ai-mock.js";
 
-import { runCli } from '../src/run.js'
-import { makeAssistantMessage } from './helpers/pi-ai-mock.js'
-
-type MockModel = { provider: string; id: string; api: Api }
+type MockModel = { provider: string; id: string; api: Api };
 
 const htmlResponse = (html: string, status = 200) =>
   new Response(html, {
     status,
-    headers: { 'Content-Type': 'text/html' },
-  })
+    headers: { "Content-Type": "text/html" },
+  });
 
 const mocks = vi.hoisted(() => ({
   completeSimple: vi.fn(),
   streamSimple: vi.fn(),
   getModel: vi.fn(() => {
-    throw new Error('no model')
+    throw new Error("no model");
   }),
-}))
+}));
 
 mocks.completeSimple.mockImplementation(async (model: MockModel) =>
-  makeAssistantMessage({ text: '   ', provider: model.provider, model: model.id, api: model.api })
-)
+  makeAssistantMessage({ text: "   ", provider: model.provider, model: model.id, api: model.api }),
+);
 
-vi.mock('@mariozechner/pi-ai', () => ({
+vi.mock("@mariozechner/pi-ai", () => ({
   completeSimple: mocks.completeSimple,
   streamSimple: mocks.streamSimple,
   getModel: mocks.getModel,
-}))
+}));
 
-describe('cli empty summary handling', () => {
-  it('throws when model returns only whitespace', async () => {
+describe("cli empty summary handling", () => {
+  it("throws when model returns only whitespace", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : input.url
-      if (url === 'https://example.com') {
+      const url = typeof input === "string" ? input : input.url;
+      if (url === "https://example.com") {
         return htmlResponse(
-          '<!doctype html><html><body><article><p>Hello</p></article></body></html>'
-        )
+          "<!doctype html><html><body><article><p>Hello</p></article></body></html>",
+        );
       }
-      throw new Error(`Unexpected fetch call: ${url}`)
-    })
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
 
     const stdout = new Writable({
       write(chunk, _encoding, callback) {
-        void chunk
-        callback()
+        void chunk;
+        callback();
       },
-    })
+    });
     const stderr = new Writable({
       write(chunk, _encoding, callback) {
-        void chunk
-        callback()
+        void chunk;
+        callback();
       },
-    })
+    });
 
     await expect(
-      runCli(['--model', 'openai/gpt-5.2', '--timeout', '10s', 'https://example.com'], {
-        env: { OPENAI_API_KEY: 'test' },
+      runCli(["--model", "openai/gpt-5.2", "--timeout", "10s", "https://example.com"], {
+        env: { OPENAI_API_KEY: "test" },
         fetch: fetchMock as unknown as typeof fetch,
         stdout,
         stderr,
-      })
-    ).rejects.toThrow(/empty summary/i)
-  })
-})
+      }),
+    ).rejects.toThrow(/empty summary/i);
+  });
+});

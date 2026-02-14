@@ -6,5 +6,5 @@ export function SchemeChips({ scheme }: { scheme: string }) {
       <span></span>
       <span></span>
     </span>
-  )
+  );
 }

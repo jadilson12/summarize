@@ -1,34 +1,34 @@
-import type { SummaryLength } from '../shared/contracts.js'
+import type { SummaryLength } from "../shared/contracts.js";
 
 export function formatOptionalString(value: string | null | undefined): string {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value.trim()
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
   }
-  return 'none'
+  return "none";
 }
 
 export function formatOptionalNumber(value: number | null | undefined): string {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(value)
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
   }
-  return 'none'
+  return "none";
 }
 
 export function sumNumbersOrNull(values: Array<number | null>): number | null {
-  let sum = 0
-  let any = false
+  let sum = 0;
+  let any = false;
   for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      sum += value
-      any = true
+    if (typeof value === "number" && Number.isFinite(value)) {
+      sum += value;
+      any = true;
     }
   }
-  return any ? sum : null
+  return any ? sum : null;
 }
 
 export function formatUSD(value: number): string {
-  if (!Number.isFinite(value)) return 'n/a'
-  return `$${value.toFixed(4)}`
+  if (!Number.isFinite(value)) return "n/a";
+  return `$${value.toFixed(4)}`;
 }
 
 export function estimateWhisperTranscriptionCostUsd({
@@ -37,33 +37,33 @@ export function estimateWhisperTranscriptionCostUsd({
   mediaDurationSeconds,
   openaiWhisperUsdPerMinute,
 }: {
-  transcriptionProvider: string | null
-  transcriptSource: string | null
-  mediaDurationSeconds: number | null
-  openaiWhisperUsdPerMinute: number
+  transcriptionProvider: string | null;
+  transcriptSource: string | null;
+  mediaDurationSeconds: number | null;
+  openaiWhisperUsdPerMinute: number;
 }): number | null {
-  if (transcriptSource !== 'whisper') return null
-  if (!transcriptionProvider || transcriptionProvider.toLowerCase() !== 'openai') return null
+  if (transcriptSource !== "whisper") return null;
+  if (!transcriptionProvider || transcriptionProvider.toLowerCase() !== "openai") return null;
   if (
-    typeof mediaDurationSeconds !== 'number' ||
+    typeof mediaDurationSeconds !== "number" ||
     !Number.isFinite(mediaDurationSeconds) ||
     mediaDurationSeconds <= 0
   ) {
-    return null
+    return null;
   }
-  const perSecond = openaiWhisperUsdPerMinute / 60
-  const cost = mediaDurationSeconds * perSecond
-  return Number.isFinite(cost) && cost > 0 ? cost : null
+  const perSecond = openaiWhisperUsdPerMinute / 60;
+  const cost = mediaDurationSeconds * perSecond;
+  return Number.isFinite(cost) && cost > 0 ? cost : null;
 }
 
 export function resolveTargetCharacters(
   lengthArg:
     | {
-        kind: 'preset'
-        preset: SummaryLength
+        kind: "preset";
+        preset: SummaryLength;
       }
-    | { kind: 'chars'; maxCharacters: number },
-  maxMap: Record<SummaryLength, number>
+    | { kind: "chars"; maxCharacters: number },
+  maxMap: Record<SummaryLength, number>,
 ): number {
-  return lengthArg.kind === 'chars' ? lengthArg.maxCharacters : maxMap[lengthArg.preset]
+  return lengthArg.kind === "chars" ? lengthArg.maxCharacters : maxMap[lengthArg.preset];
 }

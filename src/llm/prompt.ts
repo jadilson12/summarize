@@ -1,18 +1,18 @@
-import type { ImageContent, TextContent, UserMessage } from '@mariozechner/pi-ai'
-import type { Attachment } from './attachments.js'
+import type { ImageContent, TextContent, UserMessage } from "@mariozechner/pi-ai";
+import type { Attachment } from "./attachments.js";
 
 export type Prompt = {
-  system?: string
-  userText: string
-  attachments?: Attachment[]
-}
+  system?: string;
+  userText: string;
+  attachments?: Attachment[];
+};
 
 export function userTextMessage(text: string, timestamp = Date.now()): UserMessage {
-  return { role: 'user', content: text, timestamp }
+  return { role: "user", content: text, timestamp };
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('base64')
+  return Buffer.from(bytes).toString("base64");
 }
 
 export function userTextAndImageMessage({
@@ -21,14 +21,14 @@ export function userTextAndImageMessage({
   mimeType,
   timestamp = Date.now(),
 }: {
-  text: string
-  imageBytes: Uint8Array
-  mimeType: string
-  timestamp?: number
+  text: string;
+  imageBytes: Uint8Array;
+  mimeType: string;
+  timestamp?: number;
 }): UserMessage {
   const parts: Array<TextContent | ImageContent> = [
-    { type: 'text', text },
-    { type: 'image', data: bytesToBase64(imageBytes), mimeType },
-  ]
-  return { role: 'user', content: parts, timestamp }
+    { type: "text", text },
+    { type: "image", data: bytesToBase64(imageBytes), mimeType },
+  ];
+  return { role: "user", content: parts, timestamp };
 }

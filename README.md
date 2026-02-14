@@ -115,7 +115,7 @@ npm i @steipete/summarize-core
 ```
 
 ```ts
-import { createLinkPreviewClient } from '@steipete/summarize-core/content'
+import { createLinkPreviewClient } from "@steipete/summarize-core/content";
 ```
 
 - Homebrew (custom tap):

@@ -1,7 +1,7 @@
 ---
-summary: 'Config file location, precedence, and schema.'
+summary: "Config file location, precedence, and schema."
 read_when:
-  - 'When adding config keys or defaults.'
+  - "When adding config keys or defaults."
 ---
 
 # Config

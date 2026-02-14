@@ -37,8 +37,8 @@
     }
   },
   "scripts": {
-    "clean": "rimraf dist",
     "build": "pnpm clean && tsc -p tsconfig.build.json",
+    "clean": "rimraf dist",
     "typecheck": "tsc -p tsconfig.build.json --noEmit"
   },
   "dependencies": {

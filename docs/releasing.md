@@ -1,5 +1,5 @@
 ---
-summary: 'Release checklist + Homebrew tap update.'
+summary: "Release checklist + Homebrew tap update."
 ---
 
 # Releasing

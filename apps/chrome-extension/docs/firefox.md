@@ -89,9 +89,9 @@ sidebar_action: {
 **Usage** (`background.ts:407-480`, `automation/tools.ts:336-366`):
 
 ```typescript
-chrome.debugger.attach({ tabId }, '1.3')
-chrome.debugger.sendCommand({ tabId }, method, params)
-chrome.debugger.detach({ tabId })
+chrome.debugger.attach({ tabId }, "1.3");
+chrome.debugger.sendCommand({ tabId }, method, params);
+chrome.debugger.detach({ tabId });
 ```
 
 **Firefox compatibility**: ✅ **Supported** but may have behavioral differences
@@ -106,8 +106,8 @@ chrome.debugger.detach({ tabId })
 **Usage** (`automation/userscripts.ts:14-16`, `background.ts`, `automation/repl.ts:142-171`):
 
 ```typescript
-chrome.userScripts
-chrome.permissions.contains({ permissions: ['userScripts'] })
+chrome.userScripts;
+chrome.permissions.contains({ permissions: ["userScripts"] });
 ```
 
 **Firefox compatibility**: ⚠️ **Limited support**

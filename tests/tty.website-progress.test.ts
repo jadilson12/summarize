@@ -1,227 +1,226 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from "vitest";
+import { createWebsiteProgress } from "../src/tty/website-progress.js";
 
-import { createWebsiteProgress } from '../src/tty/website-progress.js'
+describe("tty website progress", () => {
+  it("returns null when disabled", () => {
+    expect(createWebsiteProgress({ enabled: false, spinner: { setText: vi.fn() } })).toBeNull();
+  });
 
-describe('tty website progress', () => {
-  it('returns null when disabled', () => {
-    expect(createWebsiteProgress({ enabled: false, spinner: { setText: vi.fn() } })).toBeNull()
-  })
+  it("renders fetch progress with ticker + rate and stops ticking after done", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
 
-  it('renders fetch progress with ticker + rate and stops ticking after done', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(1_000)
+    const setText = vi.fn();
+    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } });
+    expect(progress).not.toBeNull();
+    if (!progress) return;
 
-    const setText = vi.fn()
-    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } })
-    expect(progress).not.toBeNull()
-    if (!progress) return
+    progress.onProgress({ kind: "fetch-html-start", url: "https://example.com" });
+    expect(setText).toHaveBeenLastCalledWith("Fetching website (connecting)…");
 
-    progress.onProgress({ kind: 'fetch-html-start', url: 'https://example.com' })
-    expect(setText).toHaveBeenLastCalledWith('Fetching website (connecting)…')
+    vi.advanceTimersByTime(1_000);
+    expect(setText).toHaveBeenLastCalledWith("Fetching website (connecting, 1.0s)…");
 
-    vi.advanceTimersByTime(1_000)
-    expect(setText).toHaveBeenLastCalledWith('Fetching website (connecting, 1.0s)…')
-
-    vi.setSystemTime(3_000)
+    vi.setSystemTime(3_000);
     progress.onProgress({
-      kind: 'fetch-html-progress',
-      url: 'https://example.com',
+      kind: "fetch-html-progress",
+      url: "https://example.com",
       downloadedBytes: 2048,
       totalBytes: 4096,
-    })
-    expect(setText).toHaveBeenLastCalledWith('Fetching website (2.0 KB/4.0 KB, 2.0s, 1.0 KB/s)…')
+    });
+    expect(setText).toHaveBeenLastCalledWith("Fetching website (2.0 KB/4.0 KB, 2.0s, 1.0 KB/s)…");
 
     progress.onProgress({
-      kind: 'fetch-html-done',
-      url: 'https://example.com',
+      kind: "fetch-html-done",
+      url: "https://example.com",
       downloadedBytes: 2048,
       totalBytes: 4096,
-    })
+    });
 
-    const callsAfterDone = setText.mock.calls.length
-    vi.advanceTimersByTime(2_000)
-    expect(setText.mock.calls.length).toBe(callsAfterDone)
+    const callsAfterDone = setText.mock.calls.length;
+    vi.advanceTimersByTime(2_000);
+    expect(setText.mock.calls.length).toBe(callsAfterDone);
 
-    vi.useRealTimers()
-  })
+    vi.useRealTimers();
+  });
 
-  it('renders other phases', () => {
-    const setText = vi.fn()
-    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } })
-    expect(progress).not.toBeNull()
-    if (!progress) return
+  it("renders other phases", () => {
+    const setText = vi.fn();
+    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } });
+    expect(progress).not.toBeNull();
+    if (!progress) return;
 
-    progress.onProgress({ kind: 'bird-start', url: 'https://x.com/test/status/1' })
-    expect(setText).toHaveBeenLastCalledWith('Bird: reading tweet…')
+    progress.onProgress({ kind: "bird-start", url: "https://x.com/test/status/1" });
+    expect(setText).toHaveBeenLastCalledWith("Bird: reading tweet…");
 
     progress.onProgress({
-      kind: 'bird-done',
-      url: 'https://x.com/test/status/1',
+      kind: "bird-done",
+      url: "https://x.com/test/status/1",
       ok: false,
       textBytes: null,
-    })
-    expect(setText).toHaveBeenLastCalledWith('Bird: failed; fallback…')
+    });
+    expect(setText).toHaveBeenLastCalledWith("Bird: failed; fallback…");
 
-    progress.onProgress({ kind: 'nitter-start', url: 'https://x.com/test/status/1' })
-    expect(setText).toHaveBeenLastCalledWith('Nitter: fetching…')
+    progress.onProgress({ kind: "nitter-start", url: "https://x.com/test/status/1" });
+    expect(setText).toHaveBeenLastCalledWith("Nitter: fetching…");
 
     progress.onProgress({
-      kind: 'nitter-done',
-      url: 'https://x.com/test/status/1',
+      kind: "nitter-done",
+      url: "https://x.com/test/status/1",
       ok: true,
       textBytes: 999,
-    })
-    expect(setText).toHaveBeenLastCalledWith('Nitter: got 999 B…')
+    });
+    expect(setText).toHaveBeenLastCalledWith("Nitter: got 999 B…");
 
     progress.onProgress({
-      kind: 'firecrawl-start',
-      url: 'https://example.com',
-      reason: 'Blocked / thin HTML',
-    })
-    expect(setText).toHaveBeenLastCalledWith('Firecrawl: scraping (fallback: blocked/thin HTML)…')
+      kind: "firecrawl-start",
+      url: "https://example.com",
+      reason: "Blocked / thin HTML",
+    });
+    expect(setText).toHaveBeenLastCalledWith("Firecrawl: scraping (fallback: blocked/thin HTML)…");
 
     progress.onProgress({
-      kind: 'firecrawl-done',
-      url: 'https://example.com',
+      kind: "firecrawl-done",
+      url: "https://example.com",
       ok: true,
       markdownBytes: 10 * 1024,
       htmlBytes: null,
-    })
-    expect(setText).toHaveBeenLastCalledWith('Firecrawl: got 10 KB…')
+    });
+    expect(setText).toHaveBeenLastCalledWith("Firecrawl: got 10 KB…");
 
     progress.onProgress({
-      kind: 'transcript-start',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
-      hint: 'Podcast: resolving transcript',
-    })
-    expect(setText).toHaveBeenLastCalledWith('Podcast: resolving transcript…')
+      kind: "transcript-start",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
+      hint: "Podcast: resolving transcript",
+    });
+    expect(setText).toHaveBeenLastCalledWith("Podcast: resolving transcript…");
 
     progress.onProgress({
-      kind: 'transcript-done',
-      url: 'https://podcasts.example/episode',
+      kind: "transcript-done",
+      url: "https://podcasts.example/episode",
       ok: true,
-      service: 'podcast',
-      source: 'whisper',
+      service: "podcast",
+      source: "whisper",
       hint: null,
-    })
-    expect(setText).toHaveBeenLastCalledWith('Transcribed…')
-  })
+    });
+    expect(setText).toHaveBeenLastCalledWith("Transcribed…");
+  });
 
-  it('renders podcast download + whisper progress', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(1_000)
+  it("renders podcast download + whisper progress", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
 
-    const setText = vi.fn()
-    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } })
-    expect(progress).not.toBeNull()
-    if (!progress) return
+    const setText = vi.fn();
+    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } });
+    expect(progress).not.toBeNull();
+    if (!progress) return;
 
     progress.onProgress({
-      kind: 'transcript-media-download-start',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
-      mediaUrl: 'https://cdn.example/episode.mp3',
+      kind: "transcript-media-download-start",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
+      mediaUrl: "https://cdn.example/episode.mp3",
       totalBytes: 15 * 1024,
-    })
-    expect(setText).toHaveBeenLastCalledWith('Downloading audio…')
+    });
+    expect(setText).toHaveBeenLastCalledWith("Downloading audio…");
 
-    vi.setSystemTime(163_000)
+    vi.setSystemTime(163_000);
     progress.onProgress({
-      kind: 'transcript-media-download-progress',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
+      kind: "transcript-media-download-progress",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
       downloadedBytes: 136 * 1024,
       totalBytes: 15 * 1024,
-    })
+    });
     expect(setText).toHaveBeenLastCalledWith(
-      expect.stringContaining('Downloading audio (podcast, 136 KB, 2m 42s')
-    )
-    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('B/s'))
-    expect(setText).toHaveBeenLastCalledWith(expect.not.stringContaining('2m42s'))
+      expect.stringContaining("Downloading audio (podcast, 136 KB, 2m 42s"),
+    );
+    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining("B/s"));
+    expect(setText).toHaveBeenLastCalledWith(expect.not.stringContaining("2m42s"));
 
     progress.onProgress({
-      kind: 'transcript-media-download-done',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
+      kind: "transcript-media-download-done",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
       downloadedBytes: 136 * 1024,
       totalBytes: 15 * 1024,
-    })
+    });
 
-    vi.setSystemTime(163_000)
+    vi.setSystemTime(163_000);
     progress.onProgress({
-      kind: 'transcript-whisper-start',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
-      providerHint: 'openai',
-      modelId: 'whisper-1',
+      kind: "transcript-whisper-start",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
+      providerHint: "openai",
+      modelId: "whisper-1",
       totalDurationSeconds: 3600,
       parts: 6,
-    })
+    });
     expect(setText).toHaveBeenLastCalledWith(
-      expect.stringContaining('Transcribing (podcast, Whisper/OpenAI, whisper-1')
-    )
+      expect.stringContaining("Transcribing (podcast, Whisper/OpenAI, whisper-1"),
+    );
 
-    vi.setSystemTime(288_000)
+    vi.setSystemTime(288_000);
     progress.onProgress({
-      kind: 'transcript-whisper-progress',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
+      kind: "transcript-whisper-progress",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
       processedDurationSeconds: 600,
       totalDurationSeconds: 3600,
       partIndex: 1,
       parts: 6,
-    })
-    const last = setText.mock.calls.at(-1)?.[0] ?? ''
-    expect(last).toContain('10m/1h')
-    expect(last).toContain('1/6')
-    expect(last).toContain('2m 5s')
+    });
+    const last = setText.mock.calls.at(-1)?.[0] ?? "";
+    expect(last).toContain("10m/1h");
+    expect(last).toContain("1/6");
+    expect(last).toContain("2m 5s");
 
-    vi.useRealTimers()
-  })
+    vi.useRealTimers();
+  });
 
-  it('renders whisper provider hints and optional duration/parts', () => {
-    const setText = vi.fn()
-    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } })
-    expect(progress).not.toBeNull()
-    if (!progress) return
+  it("renders whisper provider hints and optional duration/parts", () => {
+    const setText = vi.fn();
+    const progress = createWebsiteProgress({ enabled: true, spinner: { setText } });
+    expect(progress).not.toBeNull();
+    if (!progress) return;
 
     progress.onProgress({
-      kind: 'transcript-whisper-start',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
-      providerHint: 'fal',
-      modelId: 'fal-ai/wizper',
+      kind: "transcript-whisper-start",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
+      providerHint: "fal",
+      modelId: "fal-ai/wizper",
       totalDurationSeconds: null,
       parts: null,
-    })
-    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('Whisper/FAL, fal-ai/wizper'))
+    });
+    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining("Whisper/FAL, fal-ai/wizper"));
 
     progress.onProgress({
-      kind: 'transcript-whisper-start',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
-      providerHint: 'openai->fal',
-      modelId: 'whisper-1->fal-ai/wizper',
+      kind: "transcript-whisper-start",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
+      providerHint: "openai->fal",
+      modelId: "whisper-1->fal-ai/wizper",
       totalDurationSeconds: 44,
       parts: null,
-    })
+    });
     expect(setText).toHaveBeenLastCalledWith(
-      expect.stringContaining('Whisper/OpenAI→FAL, whisper-1->fal-ai/wizper')
-    )
-    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining('44s'))
+      expect.stringContaining("Whisper/OpenAI→FAL, whisper-1->fal-ai/wizper"),
+    );
+    expect(setText).toHaveBeenLastCalledWith(expect.stringContaining("44s"));
 
     progress.onProgress({
-      kind: 'transcript-whisper-start',
-      url: 'https://podcasts.example/episode',
-      service: 'podcast',
-      providerHint: 'unknown',
+      kind: "transcript-whisper-start",
+      url: "https://podcasts.example/episode",
+      service: "podcast",
+      providerHint: "unknown",
       modelId: null,
       totalDurationSeconds: null,
       parts: 3,
-    })
+    });
     expect(setText).toHaveBeenLastCalledWith(
-      expect.stringContaining('Transcribing (podcast, Whisper')
-    )
-  })
-})
+      expect.stringContaining("Transcribing (podcast, Whisper"),
+    );
+  });
+});

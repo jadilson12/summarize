@@ -1,79 +1,83 @@
-import { execFile } from 'node:child_process'
-import fs from 'node:fs/promises'
-import { CommanderError } from 'commander'
+import { CommanderError } from "commander";
+import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import type { ExecFileFn } from "../markitdown.js";
+import type { FixedModelSpec } from "../model-spec.js";
 import {
   type CacheState,
   clearCacheFiles,
   DEFAULT_CACHE_MAX_MB,
   resolveCachePath,
-} from '../cache.js'
-import { loadSummarizeConfig, mergeConfigEnv } from '../config.js'
+} from "../cache.js";
+import { loadSummarizeConfig, mergeConfigEnv } from "../config.js";
 import {
   parseExtractFormat,
   parseMaxExtractCharactersArg,
   parseMetricsMode,
   parseStreamMode,
-} from '../flags.js'
-import type { ExecFileFn } from '../markitdown.js'
-import type { FixedModelSpec } from '../model-spec.js'
-import { resolveSlideSettings } from '../slides/index.js'
-import { createThemeRenderer, resolveThemeNameFromSources, resolveTrueColor } from '../tty/theme.js'
-import { formatVersionLine } from '../version.js'
-import { createCacheStateFromConfig } from './cache-state.js'
+} from "../flags.js";
+import { resolveSlideSettings } from "../slides/index.js";
+import {
+  createThemeRenderer,
+  resolveThemeNameFromSources,
+  resolveTrueColor,
+} from "../tty/theme.js";
+import { formatVersionLine } from "../version.js";
+import { createCacheStateFromConfig } from "./cache-state.js";
 import {
   handleDaemonCliRequest,
   handleHelpRequest,
   handleRefreshFreeRequest,
-} from './cli-preflight.js'
-import { parseCliProviderArg } from './env.js'
-import { extractAssetContent } from './flows/asset/extract.js'
-import { handleFileInput, isTranscribableExtension, withUrlAsset } from './flows/asset/input.js'
-import { summarizeMediaFile as summarizeMediaFileImpl } from './flows/asset/media.js'
-import { outputExtractedAsset } from './flows/asset/output.js'
-import { summarizeAsset as summarizeAssetFlow } from './flows/asset/summary.js'
-import { runUrlFlow } from './flows/url/flow.js'
-import { attachRichHelp, buildProgram } from './help.js'
-import { createMediaCacheFromConfig } from './media-cache-state.js'
-import { createProgressGate } from './progress.js'
-import { resolveRunContextState } from './run-context.js'
-import { resolveRunInput } from './run-input.js'
-import { createRunMetrics } from './run-metrics.js'
-import { resolveModelSelection } from './run-models.js'
-import { resolveDesiredOutputTokens } from './run-output.js'
-import { resolveCliRunSettings } from './run-settings.js'
-import { resolveStreamSettings } from './run-stream.js'
-import { handleSlidesCliRequest } from './slides-cli.js'
-import { createTempFileFromStdin } from './stdin-temp-file.js'
-import { createSummaryEngine } from './summary-engine.js'
-import { isRichTty, supportsColor } from './terminal.js'
-import { handleTranscriberCliRequest } from './transcriber-cli.js'
+} from "./cli-preflight.js";
+import { parseCliProviderArg } from "./env.js";
+import { extractAssetContent } from "./flows/asset/extract.js";
+import { handleFileInput, isTranscribableExtension, withUrlAsset } from "./flows/asset/input.js";
+import { summarizeMediaFile as summarizeMediaFileImpl } from "./flows/asset/media.js";
+import { outputExtractedAsset } from "./flows/asset/output.js";
+import { summarizeAsset as summarizeAssetFlow } from "./flows/asset/summary.js";
+import { runUrlFlow } from "./flows/url/flow.js";
+import { attachRichHelp, buildProgram } from "./help.js";
+import { createMediaCacheFromConfig } from "./media-cache-state.js";
+import { createProgressGate } from "./progress.js";
+import { resolveRunContextState } from "./run-context.js";
+import { resolveRunInput } from "./run-input.js";
+import { createRunMetrics } from "./run-metrics.js";
+import { resolveModelSelection } from "./run-models.js";
+import { resolveDesiredOutputTokens } from "./run-output.js";
+import { resolveCliRunSettings } from "./run-settings.js";
+import { resolveStreamSettings } from "./run-stream.js";
+import { handleSlidesCliRequest } from "./slides-cli.js";
+import { createTempFileFromStdin } from "./stdin-temp-file.js";
+import { createSummaryEngine } from "./summary-engine.js";
+import { isRichTty, supportsColor } from "./terminal.js";
+import { handleTranscriberCliRequest } from "./transcriber-cli.js";
 
 type RunEnv = {
-  env: Record<string, string | undefined>
-  fetch: typeof fetch
-  execFile?: ExecFileFn
-  stdin?: NodeJS.ReadableStream
-  stdout: NodeJS.WritableStream
-  stderr: NodeJS.WritableStream
-}
+  env: Record<string, string | undefined>;
+  fetch: typeof fetch;
+  execFile?: ExecFileFn;
+  stdin?: NodeJS.ReadableStream;
+  stdout: NodeJS.WritableStream;
+  stderr: NodeJS.WritableStream;
+};
 
 export async function runCli(
   argv: string[],
-  { env: inputEnv, fetch, execFile: execFileOverride, stdin, stdout, stderr }: RunEnv
+  { env: inputEnv, fetch, execFile: execFileOverride, stdin, stdout, stderr }: RunEnv,
 ): Promise<void> {
-  ;(globalThis as unknown as { AI_SDK_LOG_WARNINGS?: boolean }).AI_SDK_LOG_WARNINGS = false
+  (globalThis as unknown as { AI_SDK_LOG_WARNINGS?: boolean }).AI_SDK_LOG_WARNINGS = false;
 
-  const normalizedArgv = argv.filter((arg) => arg !== '--')
-  const noColorFlag = normalizedArgv.includes('--no-color')
+  const normalizedArgv = argv.filter((arg) => arg !== "--");
+  const noColorFlag = normalizedArgv.includes("--no-color");
   let envForRun: Record<string, string | undefined> = noColorFlag
-    ? { ...inputEnv, NO_COLOR: '1', FORCE_COLOR: '0' }
-    : { ...inputEnv }
-  const { config: bootstrapConfig } = loadSummarizeConfig({ env: envForRun })
-  envForRun = mergeConfigEnv({ env: envForRun, config: bootstrapConfig })
-  const env = envForRun
+    ? { ...inputEnv, NO_COLOR: "1", FORCE_COLOR: "0" }
+    : { ...inputEnv };
+  const { config: bootstrapConfig } = loadSummarizeConfig({ env: envForRun });
+  envForRun = mergeConfigEnv({ env: envForRun, config: bootstrapConfig });
+  const env = envForRun;
 
   if (handleHelpRequest({ normalizedArgv, envForRun, stdout, stderr })) {
-    return
+    return;
   }
   if (
     await handleRefreshFreeRequest({
@@ -84,7 +88,7 @@ export async function runCli(
       stderr,
     })
   ) {
-    return
+    return;
   }
   if (
     await handleDaemonCliRequest({
@@ -95,7 +99,7 @@ export async function runCli(
       stderr,
     })
   ) {
-    return
+    return;
   }
   if (
     await handleSlidesCliRequest({
@@ -106,7 +110,7 @@ export async function runCli(
       stderr,
     })
   ) {
-    return
+    return;
   }
   if (
     await handleTranscriberCliRequest({
@@ -116,221 +120,221 @@ export async function runCli(
       stderr,
     })
   ) {
-    return
+    return;
   }
-  const execFileImpl = execFileOverride ?? execFile
-  const program = buildProgram()
+  const execFileImpl = execFileOverride ?? execFile;
+  const program = buildProgram();
   program.configureOutput({
     writeOut(str) {
-      stdout.write(str)
+      stdout.write(str);
     },
     writeErr(str) {
-      stderr.write(str)
+      stderr.write(str);
     },
-  })
-  program.exitOverride()
-  attachRichHelp(program, envForRun, stdout)
+  });
+  program.exitOverride();
+  attachRichHelp(program, envForRun, stdout);
 
   try {
-    program.parse(normalizedArgv, { from: 'user' })
+    program.parse(normalizedArgv, { from: "user" });
   } catch (error) {
-    if (error instanceof CommanderError && error.code === 'commander.helpDisplayed') {
-      return
+    if (error instanceof CommanderError && error.code === "commander.helpDisplayed") {
+      return;
     }
-    throw error
+    throw error;
   }
 
   if (program.opts().version) {
-    stdout.write(`${formatVersionLine()}\n`)
-    return
+    stdout.write(`${formatVersionLine()}\n`);
+    return;
   }
 
-  const promptArg = typeof program.opts().prompt === 'string' ? program.opts().prompt : null
+  const promptArg = typeof program.opts().prompt === "string" ? program.opts().prompt : null;
   const promptFileArg =
-    typeof program.opts().promptFile === 'string' ? program.opts().promptFile : null
+    typeof program.opts().promptFile === "string" ? program.opts().promptFile : null;
   if (promptArg && promptFileArg) {
-    throw new Error('Use either --prompt or --prompt-file (not both).')
+    throw new Error("Use either --prompt or --prompt-file (not both).");
   }
-  let promptOverride: string | null = null
+  let promptOverride: string | null = null;
   if (promptFileArg) {
-    let text: string
+    let text: string;
     try {
-      text = await fs.readFile(promptFileArg, 'utf8')
+      text = await fs.readFile(promptFileArg, "utf8");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(`Failed to read --prompt-file ${promptFileArg}: ${message}`)
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to read --prompt-file ${promptFileArg}: ${message}`);
     }
-    const trimmed = text.trim()
+    const trimmed = text.trim();
     if (!trimmed) {
-      throw new Error(`Prompt file ${promptFileArg} is empty.`)
+      throw new Error(`Prompt file ${promptFileArg} is empty.`);
     }
-    promptOverride = trimmed
+    promptOverride = trimmed;
   } else if (promptArg) {
-    const trimmed = promptArg.trim()
+    const trimmed = promptArg.trim();
     if (!trimmed) {
-      throw new Error('Prompt must not be empty.')
+      throw new Error("Prompt must not be empty.");
     }
-    promptOverride = trimmed
+    promptOverride = trimmed;
   }
 
-  const clearCacheFlag = normalizedArgv.includes('--clear-cache')
+  const clearCacheFlag = normalizedArgv.includes("--clear-cache");
   if (clearCacheFlag) {
-    const extraArgs = normalizedArgv.filter((arg) => arg !== '--clear-cache')
+    const extraArgs = normalizedArgv.filter((arg) => arg !== "--clear-cache");
     if (extraArgs.length > 0) {
-      throw new Error('--clear-cache must be used alone.')
+      throw new Error("--clear-cache must be used alone.");
     }
-    const { config } = loadSummarizeConfig({ env: envForRun })
+    const { config } = loadSummarizeConfig({ env: envForRun });
     const cachePath = resolveCachePath({
       env: envForRun,
       cachePath: config?.cache?.path ?? null,
-    })
+    });
     if (!cachePath) {
-      throw new Error('Unable to resolve cache path (missing HOME).')
+      throw new Error("Unable to resolve cache path (missing HOME).");
     }
-    clearCacheFiles(cachePath)
-    stdout.write('Cache cleared.\n')
-    return
+    clearCacheFiles(cachePath);
+    stdout.write("Cache cleared.\n");
+    return;
   }
 
-  const cacheStatsFlag = normalizedArgv.includes('--cache-stats')
+  const cacheStatsFlag = normalizedArgv.includes("--cache-stats");
   if (cacheStatsFlag) {
-    const extraArgs = normalizedArgv.filter((arg) => arg !== '--cache-stats')
+    const extraArgs = normalizedArgv.filter((arg) => arg !== "--cache-stats");
     if (extraArgs.length > 0) {
-      throw new Error('--cache-stats must be used alone.')
+      throw new Error("--cache-stats must be used alone.");
     }
-    const { config } = loadSummarizeConfig({ env: envForRun })
+    const { config } = loadSummarizeConfig({ env: envForRun });
     const cachePath = resolveCachePath({
       env: envForRun,
       cachePath: config?.cache?.path ?? null,
-    })
+    });
     if (!cachePath) {
-      throw new Error('Unable to resolve cache path (missing HOME).')
+      throw new Error("Unable to resolve cache path (missing HOME).");
     }
     const cacheMaxMb =
-      typeof config?.cache?.maxMb === 'number' ? config.cache.maxMb : DEFAULT_CACHE_MAX_MB
-    const cacheMaxBytes = Math.max(0, cacheMaxMb) * 1024 * 1024
-    const { readCacheStats } = await import('../cache.js')
-    const { formatBytes } = await import('../tty/format.js')
-    const stats = await readCacheStats(cachePath)
-    stdout.write(`Cache path: ${cachePath}\n`)
+      typeof config?.cache?.maxMb === "number" ? config.cache.maxMb : DEFAULT_CACHE_MAX_MB;
+    const cacheMaxBytes = Math.max(0, cacheMaxMb) * 1024 * 1024;
+    const { readCacheStats } = await import("../cache.js");
+    const { formatBytes } = await import("../tty/format.js");
+    const stats = await readCacheStats(cachePath);
+    stdout.write(`Cache path: ${cachePath}\n`);
     if (!stats) {
-      stdout.write('Cache is empty.\n')
-      return
+      stdout.write("Cache is empty.\n");
+      return;
     }
-    const sizeLabel = formatBytes(stats.sizeBytes)
-    const maxLabel = cacheMaxBytes > 0 ? formatBytes(cacheMaxBytes) : 'disabled'
-    stdout.write(`Size: ${sizeLabel} (max ${maxLabel})\n`)
+    const sizeLabel = formatBytes(stats.sizeBytes);
+    const maxLabel = cacheMaxBytes > 0 ? formatBytes(cacheMaxBytes) : "disabled";
+    stdout.write(`Size: ${sizeLabel} (max ${maxLabel})\n`);
     stdout.write(
-      `Entries: total=${stats.totalEntries} extract=${stats.counts.extract} summary=${stats.counts.summary} transcript=${stats.counts.transcript}\n`
-    )
-    return
+      `Entries: total=${stats.totalEntries} extract=${stats.counts.extract} summary=${stats.counts.summary} transcript=${stats.counts.transcript}\n`,
+    );
+    return;
   }
 
-  const cliFlagPresent = normalizedArgv.some((arg) => arg === '--cli' || arg.startsWith('--cli='))
-  let cliProviderArgRaw = typeof program.opts().cli === 'string' ? program.opts().cli : null
+  const cliFlagPresent = normalizedArgv.some((arg) => arg === "--cli" || arg.startsWith("--cli="));
+  let cliProviderArgRaw = typeof program.opts().cli === "string" ? program.opts().cli : null;
   const inputResolution = resolveRunInput({
     program,
     cliFlagPresent,
     cliProviderArgRaw,
     stdout,
-  })
-  cliProviderArgRaw = inputResolution.cliProviderArgRaw
-  const inputTarget = inputResolution.inputTarget
-  const url = inputResolution.url
+  });
+  cliProviderArgRaw = inputResolution.cliProviderArgRaw;
+  const inputTarget = inputResolution.inputTarget;
+  const url = inputResolution.url;
 
-  const runStartedAtMs = Date.now()
+  const runStartedAtMs = Date.now();
 
   const videoModeExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--video-mode' || arg.startsWith('--video-mode=')
-  )
+    (arg) => arg === "--video-mode" || arg.startsWith("--video-mode="),
+  );
   const lengthExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--length' || arg.startsWith('--length=')
-  )
+    (arg) => arg === "--length" || arg.startsWith("--length="),
+  );
   const languageExplicitlySet = normalizedArgv.some(
     (arg) =>
-      arg === '--language' ||
-      arg.startsWith('--language=') ||
-      arg === '--lang' ||
-      arg.startsWith('--lang=')
-  )
-  const noCacheFlag = program.opts().cache === false
-  const noMediaCacheFlag = program.opts().mediaCache === false
-  const extractMode = Boolean(program.opts().extract) || Boolean(program.opts().extractOnly)
-  const json = Boolean(program.opts().json)
-  const forceSummary = Boolean(program.opts().forceSummary)
-  const slidesDebug = Boolean(program.opts().slidesDebug)
-  const streamMode = parseStreamMode(program.opts().stream as string)
-  const plain = Boolean(program.opts().plain)
-  const debug = Boolean(program.opts().debug)
-  const verbose = Boolean(program.opts().verbose) || debug
+      arg === "--language" ||
+      arg.startsWith("--language=") ||
+      arg === "--lang" ||
+      arg.startsWith("--lang="),
+  );
+  const noCacheFlag = program.opts().cache === false;
+  const noMediaCacheFlag = program.opts().mediaCache === false;
+  const extractMode = Boolean(program.opts().extract) || Boolean(program.opts().extractOnly);
+  const json = Boolean(program.opts().json);
+  const forceSummary = Boolean(program.opts().forceSummary);
+  const slidesDebug = Boolean(program.opts().slidesDebug);
+  const streamMode = parseStreamMode(program.opts().stream as string);
+  const plain = Boolean(program.opts().plain);
+  const debug = Boolean(program.opts().debug);
+  const verbose = Boolean(program.opts().verbose) || debug;
 
   const normalizeTranscriber = (
-    value: unknown
-  ): 'auto' | 'whisper' | 'parakeet' | 'canary' | null => {
-    if (typeof value !== 'string') return null
-    const normalized = value.trim().toLowerCase()
+    value: unknown,
+  ): "auto" | "whisper" | "parakeet" | "canary" | null => {
+    if (typeof value !== "string") return null;
+    const normalized = value.trim().toLowerCase();
     if (
-      normalized === 'auto' ||
-      normalized === 'whisper' ||
-      normalized === 'parakeet' ||
-      normalized === 'canary'
+      normalized === "auto" ||
+      normalized === "whisper" ||
+      normalized === "parakeet" ||
+      normalized === "canary"
     )
-      return normalized
-    return null
-  }
+      return normalized;
+    return null;
+  };
 
   const transcriberExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--transcriber' || arg.startsWith('--transcriber=')
-  )
+    (arg) => arg === "--transcriber" || arg.startsWith("--transcriber="),
+  );
   const envTranscriber =
     (envForRun as Record<string, string | undefined>)?.SUMMARIZE_TRANSCRIBER ??
     process.env.SUMMARIZE_TRANSCRIBER ??
-    null
+    null;
   const transcriber =
     normalizeTranscriber(transcriberExplicitlySet ? program.opts().transcriber : envTranscriber) ??
-    'auto'
-  ;(envForRun as Record<string, string | undefined>).SUMMARIZE_TRANSCRIBER = transcriber
+    "auto";
+  (envForRun as Record<string, string | undefined>).SUMMARIZE_TRANSCRIBER = transcriber;
 
   const maxExtractCharacters = parseMaxExtractCharactersArg(
-    typeof program.opts().maxExtractCharacters === 'string'
+    typeof program.opts().maxExtractCharacters === "string"
       ? (program.opts().maxExtractCharacters as string)
       : program.opts().maxExtractCharacters != null
         ? String(program.opts().maxExtractCharacters)
-        : undefined
-  )
+        : undefined,
+  );
 
-  const isYoutubeUrl = typeof url === 'string' ? /youtube\.com|youtu\.be/i.test(url) : false
+  const isYoutubeUrl = typeof url === "string" ? /youtube\.com|youtu\.be/i.test(url) : false;
   const formatExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--format' || arg.startsWith('--format=')
-  )
+    (arg) => arg === "--format" || arg.startsWith("--format="),
+  );
   const rawFormatOpt =
-    typeof program.opts().format === 'string' ? (program.opts().format as string) : null
+    typeof program.opts().format === "string" ? (program.opts().format as string) : null;
   const format = parseExtractFormat(
     formatExplicitlySet
-      ? (rawFormatOpt ?? 'text')
-      : extractMode && inputTarget.kind === 'url' && !isYoutubeUrl
-        ? 'md'
-        : 'text'
-  )
+      ? (rawFormatOpt ?? "text")
+      : extractMode && inputTarget.kind === "url" && !isYoutubeUrl
+        ? "md"
+        : "text",
+  );
 
   const runSettings = resolveCliRunSettings({
     length: String(program.opts().length),
     firecrawl: String(program.opts().firecrawl),
     markdownMode:
-      typeof program.opts().markdownMode === 'string' ? program.opts().markdownMode : undefined,
-    markdown: typeof program.opts().markdown === 'string' ? program.opts().markdown : undefined,
+      typeof program.opts().markdownMode === "string" ? program.opts().markdownMode : undefined,
+    markdown: typeof program.opts().markdown === "string" ? program.opts().markdown : undefined,
     format,
     preprocess: String(program.opts().preprocess),
     youtube: String(program.opts().youtube),
     timeout: String(program.opts().timeout),
     retries: String(program.opts().retries),
     maxOutputTokens:
-      typeof program.opts().maxOutputTokens === 'string'
+      typeof program.opts().maxOutputTokens === "string"
         ? program.opts().maxOutputTokens
         : program.opts().maxOutputTokens != null
           ? String(program.opts().maxOutputTokens)
           : undefined,
-  })
+  });
   const {
     youtubeMode,
     lengthArg,
@@ -340,46 +344,46 @@ export async function runCli(
     preprocessMode,
     firecrawlMode: requestedFirecrawlMode,
     markdownMode,
-  } = runSettings
+  } = runSettings;
 
   if (extractMode && lengthExplicitlySet && !json && isRichTty(stderr)) {
-    stderr.write('Warning: --length is ignored with --extract (no summary is generated).\n')
+    stderr.write("Warning: --length is ignored with --extract (no summary is generated).\n");
   }
 
   const metricsExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--metrics' || arg.startsWith('--metrics=')
-  )
+    (arg) => arg === "--metrics" || arg.startsWith("--metrics="),
+  );
   const metricsMode = parseMetricsMode(
-    debug && !metricsExplicitlySet ? 'detailed' : (program.opts().metrics as string)
-  )
-  const metricsEnabled = metricsMode !== 'off'
-  const metricsDetailed = metricsMode === 'detailed'
-  const shouldComputeReport = metricsEnabled
+    debug && !metricsExplicitlySet ? "detailed" : (program.opts().metrics as string),
+  );
+  const metricsEnabled = metricsMode !== "off";
+  const metricsDetailed = metricsMode === "detailed";
+  const shouldComputeReport = metricsEnabled;
 
   const _firecrawlExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--firecrawl' || arg.startsWith('--firecrawl=')
-  )
+    (arg) => arg === "--firecrawl" || arg.startsWith("--firecrawl="),
+  );
   const markdownModeExplicitlySet = normalizedArgv.some(
     (arg) =>
-      arg === '--markdown-mode' ||
-      arg.startsWith('--markdown-mode=') ||
-      arg === '--markdown' ||
-      arg.startsWith('--markdown=')
-  )
+      arg === "--markdown-mode" ||
+      arg.startsWith("--markdown-mode=") ||
+      arg === "--markdown" ||
+      arg.startsWith("--markdown="),
+  );
   const modelArg =
-    typeof program.opts().model === 'string' ? (program.opts().model as string) : null
+    typeof program.opts().model === "string" ? (program.opts().model as string) : null;
   const cliProviderArg =
-    typeof cliProviderArgRaw === 'string' && cliProviderArgRaw.trim().length > 0
+    typeof cliProviderArgRaw === "string" && cliProviderArgRaw.trim().length > 0
       ? parseCliProviderArg(cliProviderArgRaw)
-      : null
+      : null;
   if (cliFlagPresent && modelArg) {
-    throw new Error('Use either --model or --cli (not both).')
+    throw new Error("Use either --model or --cli (not both).");
   }
   const explicitModelArg = cliProviderArg
     ? `cli/${cliProviderArg}`
     : cliFlagPresent
-      ? 'auto'
-      : modelArg
+      ? "auto"
+      : modelArg;
 
   const {
     config,
@@ -420,36 +424,36 @@ export async function runCli(
     videoModeExplicitlySet,
     cliFlagPresent,
     cliProviderArg,
-  })
+  });
   const themeName = resolveThemeNameFromSources({
     cli: (program.opts() as { theme?: unknown }).theme,
     env: envForRun.SUMMARIZE_THEME,
     config: config?.ui?.theme,
-  })
-  ;(envForRun as Record<string, string | undefined>).SUMMARIZE_THEME = themeName
-  if (!promptOverride && typeof config?.prompt === 'string' && config.prompt.trim().length > 0) {
-    promptOverride = config.prompt.trim()
+  });
+  (envForRun as Record<string, string | undefined>).SUMMARIZE_THEME = themeName;
+  if (!promptOverride && typeof config?.prompt === "string" && config.prompt.trim().length > 0) {
+    promptOverride = config.prompt.trim();
   }
 
   const slidesExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--slides' || arg === '--no-slides' || arg.startsWith('--slides=')
-  )
+    (arg) => arg === "--slides" || arg === "--no-slides" || arg.startsWith("--slides="),
+  );
   const slidesOcrExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--slides-ocr' || arg === '--no-slides-ocr' || arg.startsWith('--slides-ocr=')
-  )
+    (arg) => arg === "--slides-ocr" || arg === "--no-slides-ocr" || arg.startsWith("--slides-ocr="),
+  );
   const slidesDirExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--slides-dir' || arg.startsWith('--slides-dir=')
-  )
+    (arg) => arg === "--slides-dir" || arg.startsWith("--slides-dir="),
+  );
   const slidesSceneThresholdExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--slides-scene-threshold' || arg.startsWith('--slides-scene-threshold=')
-  )
+    (arg) => arg === "--slides-scene-threshold" || arg.startsWith("--slides-scene-threshold="),
+  );
   const slidesMaxExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--slides-max' || arg.startsWith('--slides-max=')
-  )
+    (arg) => arg === "--slides-max" || arg.startsWith("--slides-max="),
+  );
   const slidesMinDurationExplicitlySet = normalizedArgv.some(
-    (arg) => arg === '--slides-min-duration' || arg.startsWith('--slides-min-duration=')
-  )
-  const slidesConfig = config?.slides
+    (arg) => arg === "--slides-min-duration" || arg.startsWith("--slides-min-duration="),
+  );
+  const slidesConfig = config?.slides;
   const slidesSettings = resolveSlideSettings({
     slides: slidesExplicitlySet
       ? program.opts().slides
@@ -464,7 +468,7 @@ export async function runCli(
       ? program.opts().slidesSceneThreshold
       : (slidesConfig?.sceneThreshold ?? program.opts().slidesSceneThreshold),
     slidesSceneThresholdExplicit:
-      slidesSceneThresholdExplicitlySet || typeof slidesConfig?.sceneThreshold === 'number',
+      slidesSceneThresholdExplicitlySet || typeof slidesConfig?.sceneThreshold === "number",
     slidesMax: slidesMaxExplicitlySet
       ? program.opts().slidesMax
       : (slidesConfig?.max ?? program.opts().slidesMax),
@@ -472,60 +476,60 @@ export async function runCli(
       ? program.opts().slidesMinDuration
       : (slidesConfig?.minDuration ?? program.opts().slidesMinDuration),
     cwd: process.cwd(),
-  })
-  if (slidesSettings && inputTarget.kind !== 'url') {
-    throw new Error('--slides is only supported for URL inputs')
+  });
+  if (slidesSettings && inputTarget.kind !== "url") {
+    throw new Error("--slides is only supported for URL inputs");
   }
-  const transcriptTimestamps = Boolean(program.opts().timestamps) || Boolean(slidesSettings)
+  const transcriptTimestamps = Boolean(program.opts().timestamps) || Boolean(slidesSettings);
 
   const lengthInstruction =
-    promptOverride && lengthExplicitlySet && lengthArg.kind === 'chars'
+    promptOverride && lengthExplicitlySet && lengthArg.kind === "chars"
       ? `Output is ${lengthArg.maxCharacters.toLocaleString()} characters.`
-      : null
+      : null;
   const languageInstruction =
-    promptOverride && languageExplicitlySet && outputLanguage.kind === 'fixed'
+    promptOverride && languageExplicitlySet && outputLanguage.kind === "fixed"
       ? `Output should be ${outputLanguage.label}.`
-      : null
+      : null;
 
-  const transcriptNamespace = `yt:${youtubeMode}`
+  const transcriptNamespace = `yt:${youtubeMode}`;
   const cacheState: CacheState = await createCacheStateFromConfig({
     envForRun,
     config,
     noCacheFlag: false,
     transcriptNamespace,
-  })
+  });
   const mediaCache = await createMediaCacheFromConfig({
     envForRun,
     config,
     noMediaCacheFlag,
-  })
+  });
 
   try {
-    if (markdownModeExplicitlySet && format !== 'markdown') {
-      throw new Error('--markdown-mode is only supported with --format md')
+    if (markdownModeExplicitlySet && format !== "markdown") {
+      throw new Error("--markdown-mode is only supported with --format md");
     }
     if (
       markdownModeExplicitlySet &&
-      inputTarget.kind !== 'url' &&
-      inputTarget.kind !== 'file' &&
-      inputTarget.kind !== 'stdin'
+      inputTarget.kind !== "url" &&
+      inputTarget.kind !== "file" &&
+      inputTarget.kind !== "stdin"
     ) {
-      throw new Error('--markdown-mode is only supported for URL, file, or stdin inputs')
+      throw new Error("--markdown-mode is only supported for URL, file, or stdin inputs");
     }
     if (
       markdownModeExplicitlySet &&
-      (inputTarget.kind === 'file' || inputTarget.kind === 'stdin') &&
-      markdownMode !== 'llm'
+      (inputTarget.kind === "file" || inputTarget.kind === "stdin") &&
+      markdownMode !== "llm"
     ) {
       throw new Error(
-        'Only --markdown-mode llm is supported for file/stdin inputs; other modes require a URL'
-      )
+        "Only --markdown-mode llm is supported for file/stdin inputs; other modes require a URL",
+      );
     }
     const metrics = createRunMetrics({
       env,
       fetchImpl: fetch,
       maxOutputTokensArg,
-    })
+    });
     const {
       llmCalls,
       trackedFetch,
@@ -535,7 +539,7 @@ export async function runCli(
       resolveMaxOutputTokensForCall,
       resolveMaxInputTokensForCall,
       setTranscriptionCost,
-    } = metrics
+    } = metrics;
 
     const {
       requestedModel,
@@ -552,55 +556,55 @@ export async function runCli(
       configPath,
       envForRun,
       explicitModelArg,
-    })
+    });
 
-    const verboseColor = supportsColor(stderr, envForRun)
+    const verboseColor = supportsColor(stderr, envForRun);
     const themeForStderr = createThemeRenderer({
       themeName,
       enabled: verboseColor,
       trueColor: resolveTrueColor(envForRun),
-    })
-    const renderSpinnerStatus = (label: string, detail = '…') =>
-      `${themeForStderr.label(label)}${themeForStderr.dim(detail)}`
+    });
+    const renderSpinnerStatus = (label: string, detail = "…") =>
+      `${themeForStderr.label(label)}${themeForStderr.dim(detail)}`;
     const renderSpinnerStatusWithModel = (label: string, modelId: string) =>
-      `${themeForStderr.label(label)}${themeForStderr.dim(' (model: ')}${themeForStderr.accent(
-        modelId
-      )}${themeForStderr.dim(')…')}`
+      `${themeForStderr.label(label)}${themeForStderr.dim(" (model: ")}${themeForStderr.accent(
+        modelId,
+      )}${themeForStderr.dim(")…")}`;
     const { streamingEnabled } = resolveStreamSettings({
       streamMode,
       stdout,
       json,
       extractMode,
-    })
+    });
 
     if (
       extractMode &&
-      inputTarget.kind === 'file' &&
+      inputTarget.kind === "file" &&
       !isTranscribableExtension(inputTarget.filePath)
     ) {
       throw new Error(
-        '--extract for local files is only supported for media files (MP3, MP4, WAV, etc.)'
-      )
+        "--extract for local files is only supported for media files (MP3, MP4, WAV, etc.)",
+      );
     }
-    if (extractMode && inputTarget.kind === 'stdin') {
-      throw new Error('--extract is not supported for piped stdin input')
+    if (extractMode && inputTarget.kind === "stdin") {
+      throw new Error("--extract is not supported for piped stdin input");
     }
 
     // Progress UI (spinner + OSC progress) is shown on stderr. Before writing to stdout (including
     // streaming output), we stop + clear progress via the progress gate to keep scrollback clean.
-    const progressEnabled = isRichTty(stderr) && !verbose && !json
-    const progressGate = createProgressGate()
+    const progressEnabled = isRichTty(stderr) && !verbose && !json;
+    const progressGate = createProgressGate();
     const {
       clearProgressForStdout,
       restoreProgressAfterStdout,
       setClearProgressBeforeStdout,
       clearProgressIfCurrent,
-    } = progressGate
+    } = progressGate;
 
     const fixedModelSpec: FixedModelSpec | null =
-      requestedModel.kind === 'fixed' ? requestedModel : null
+      requestedModel.kind === "fixed" ? requestedModel : null;
 
-    const desiredOutputTokens = resolveDesiredOutputTokens({ lengthArg, maxOutputTokensArg })
+    const desiredOutputTokens = resolveDesiredOutputTokens({ lengthArg, maxOutputTokensArg });
 
     const summaryEngine = createSummaryEngine({
       env,
@@ -640,16 +644,16 @@ export async function runCli(
         baseUrl: zaiBaseUrl,
       },
       providerBaseUrls,
-    })
+    });
     const writeViaFooter = (parts: string[]) => {
-      if (json) return
-      if (extractMode) return
-      const filtered = parts.map((p) => p.trim()).filter(Boolean)
-      if (filtered.length === 0) return
-      clearProgressForStdout()
-      stderr.write(`${themeForStderr.dim(`via ${filtered.join(', ')}`)}\n`)
-      restoreProgressAfterStdout?.()
-    }
+      if (json) return;
+      if (extractMode) return;
+      const filtered = parts.map((p) => p.trim()).filter(Boolean);
+      if (filtered.length === 0) return;
+      clearProgressForStdout();
+      stderr.write(`${themeForStderr.dim(`via ${filtered.join(", ")}`)}\n`);
+      restoreProgressAfterStdout?.();
+    };
     const assetSummaryContext = {
       env,
       envForRun,
@@ -714,13 +718,13 @@ export async function runCli(
         zaiApiKey,
         zaiBaseUrl,
       },
-    }
+    };
 
     const summarizeAsset = (args: Parameters<typeof summarizeAssetFlow>[1]) =>
-      summarizeAssetFlow(assetSummaryContext, args)
+      summarizeAssetFlow(assetSummaryContext, args);
 
     const summarizeMediaFile = (args: Parameters<typeof summarizeMediaFileImpl>[1]) =>
-      summarizeMediaFileImpl(assetSummaryContext, args)
+      summarizeMediaFileImpl(assetSummaryContext, args);
 
     const assetInputContext = {
       env,
@@ -733,31 +737,31 @@ export async function runCli(
       summarizeMediaFile,
       setClearProgressBeforeStdout,
       clearProgressIfCurrent,
-    }
+    };
 
-    if (inputTarget.kind === 'stdin') {
+    if (inputTarget.kind === "stdin") {
       const stdinTempFile = await createTempFileFromStdin({
         stream: stdin ?? process.stdin,
-      })
+      });
       try {
-        const stdinInputTarget = { kind: 'file' as const, filePath: stdinTempFile.filePath }
+        const stdinInputTarget = { kind: "file" as const, filePath: stdinTempFile.filePath };
         if (await handleFileInput(assetInputContext, stdinInputTarget)) {
-          return
+          return;
         }
-        throw new Error('Failed to process stdin input')
+        throw new Error("Failed to process stdin input");
       } finally {
-        await stdinTempFile.cleanup()
+        await stdinTempFile.cleanup();
       }
     }
 
     if (await handleFileInput(assetInputContext, inputTarget)) {
-      return
+      return;
     }
     if (
       url &&
       (await withUrlAsset(assetInputContext, url, isYoutubeUrl, async ({ loaded, spinner }) => {
         if (extractMode) {
-          if (progressEnabled) spinner.setText(renderSpinnerStatus('Extracting text'))
+          if (progressEnabled) spinner.setText(renderSpinnerStatus("Extracting text"));
           const extracted = await extractAssetContent({
             ctx: {
               env,
@@ -767,7 +771,7 @@ export async function runCli(
               preprocessMode,
             },
             attachment: loaded.attachment,
-          })
+          });
           await outputExtractedAsset({
             io: { env, envForRun, stdout, stderr },
             flags: {
@@ -801,27 +805,27 @@ export async function runCli(
               googleConfigured,
               anthropicConfigured,
             },
-          })
-          return
+          });
+          return;
         }
 
-        if (progressEnabled) spinner.setText(renderSpinnerStatus('Summarizing'))
+        if (progressEnabled) spinner.setText(renderSpinnerStatus("Summarizing"));
         await summarizeAsset({
-          sourceKind: 'asset-url',
+          sourceKind: "asset-url",
           sourceLabel: loaded.sourceLabel,
           attachment: loaded.attachment,
           onModelChosen: (modelId) => {
-            if (!progressEnabled) return
-            spinner.setText(renderSpinnerStatusWithModel('Summarizing', modelId))
+            if (!progressEnabled) return;
+            spinner.setText(renderSpinnerStatusWithModel("Summarizing", modelId));
           },
-        })
+        });
       }))
     ) {
-      return
+      return;
     }
 
     if (!url) {
-      throw new Error('Only HTTP and HTTPS URLs can be summarized')
+      throw new Error("Only HTTP and HTTPS URLs can be summarized");
     }
 
     const urlFlowContext = {
@@ -932,10 +936,10 @@ export async function runCli(
         onSlideChunk: undefined,
         onSlidesDone: null,
       },
-    }
+    };
 
-    await runUrlFlow({ ctx: urlFlowContext, url, isYoutubeUrl })
+    await runUrlFlow({ ctx: urlFlowContext, url, isYoutubeUrl });
   } finally {
-    cacheState.store?.close()
+    cacheState.store?.close();
   }
 }

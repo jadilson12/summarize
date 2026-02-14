@@ -1,88 +1,87 @@
-import { execFile } from 'node:child_process'
-import fs from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
-
-import type { CliConfig, CliProvider } from '../config.js'
-import type { ExecFileFn } from '../markitdown.js'
-import type { LlmTokenUsage } from './generate-text.js'
+import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { CliConfig, CliProvider } from "../config.js";
+import type { ExecFileFn } from "../markitdown.js";
+import type { LlmTokenUsage } from "./generate-text.js";
 
 const DEFAULT_BINARIES: Record<CliProvider, string> = {
-  claude: 'claude',
-  codex: 'codex',
-  gemini: 'gemini',
-  agent: 'agent',
-}
+  claude: "claude",
+  codex: "codex",
+  gemini: "gemini",
+  agent: "agent",
+};
 
 const PROVIDER_PATH_ENV: Record<CliProvider, string> = {
-  claude: 'CLAUDE_PATH',
-  codex: 'CODEX_PATH',
-  gemini: 'GEMINI_PATH',
-  agent: 'AGENT_PATH',
-}
+  claude: "CLAUDE_PATH",
+  codex: "CODEX_PATH",
+  gemini: "GEMINI_PATH",
+  agent: "AGENT_PATH",
+};
 
 type RunCliModelOptions = {
-  provider: CliProvider
-  prompt: string
-  model: string | null
-  allowTools: boolean
-  timeoutMs: number
-  env: Record<string, string | undefined>
-  execFileImpl?: ExecFileFn
-  config: CliConfig | null
-  cwd?: string
-  extraArgs?: string[]
-}
+  provider: CliProvider;
+  prompt: string;
+  model: string | null;
+  allowTools: boolean;
+  timeoutMs: number;
+  env: Record<string, string | undefined>;
+  execFileImpl?: ExecFileFn;
+  config: CliConfig | null;
+  cwd?: string;
+  extraArgs?: string[];
+};
 
 type CliRunResult = {
-  text: string
-  usage: LlmTokenUsage | null
-  costUsd: number | null
-}
+  text: string;
+  usage: LlmTokenUsage | null;
+  costUsd: number | null;
+};
 
-type JsonCliProvider = Exclude<CliProvider, 'codex'>
+type JsonCliProvider = Exclude<CliProvider, "codex">;
 
 const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === 'string' && value.trim().length > 0
+  typeof value === "string" && value.trim().length > 0;
 
-const JSON_RESULT_FIELDS = ['result', 'response', 'output', 'message', 'text'] as const
+const JSON_RESULT_FIELDS = ["result", "response", "output", "message", "text"] as const;
 
 function isJsonCliProvider(provider: CliProvider): provider is JsonCliProvider {
-  return provider !== 'codex'
+  return provider !== "codex";
 }
 
 function getCliProviderConfig(
   provider: CliProvider,
-  config: CliConfig | null | undefined
+  config: CliConfig | null | undefined,
 ): CliConfig[CliProvider] | undefined {
-  if (!config) return undefined
-  if (provider === 'claude') return config.claude
-  if (provider === 'codex') return config.codex
-  if (provider === 'gemini') return config.gemini
-  return config.agent
+  if (!config) return undefined;
+  if (provider === "claude") return config.claude;
+  if (provider === "codex") return config.codex;
+  if (provider === "gemini") return config.gemini;
+  return config.agent;
 }
 
 export function isCliDisabled(
   provider: CliProvider,
-  config: CliConfig | null | undefined
+  config: CliConfig | null | undefined,
 ): boolean {
-  if (!config) return false
-  if (Array.isArray(config.enabled) && !config.enabled.includes(provider)) return true
-  return false
+  if (!config) return false;
+  if (Array.isArray(config.enabled) && !config.enabled.includes(provider)) return true;
+  return false;
 }
 
 export function resolveCliBinary(
   provider: CliProvider,
   config: CliConfig | null | undefined,
-  env: Record<string, string | undefined>
+  env: Record<string, string | undefined>,
 ): string {
-  const providerConfig = getCliProviderConfig(provider, config)
-  if (isNonEmptyString(providerConfig?.binary)) return providerConfig.binary.trim()
-  const pathKey = PROVIDER_PATH_ENV[provider]
-  if (isNonEmptyString(env[pathKey])) return env[pathKey].trim()
-  const envKey = `SUMMARIZE_CLI_${provider.toUpperCase()}`
-  if (isNonEmptyString(env[envKey])) return env[envKey].trim()
-  return DEFAULT_BINARIES[provider]
+  const providerConfig = getCliProviderConfig(provider, config);
+  if (isNonEmptyString(providerConfig?.binary)) return providerConfig.binary.trim();
+  const pathKey = PROVIDER_PATH_ENV[provider];
+  if (isNonEmptyString(env[pathKey])) return env[pathKey].trim();
+  const envKey = `SUMMARIZE_CLI_${provider.toUpperCase()}`;
+  if (isNonEmptyString(env[envKey])) return env[envKey].trim();
+  return DEFAULT_BINARIES[provider];
 }
 
 async function execCliWithInput({
@@ -94,13 +93,13 @@ async function execCliWithInput({
   env,
   cwd,
 }: {
-  execFileImpl: ExecFileFn
-  cmd: string
-  args: string[]
-  input: string
-  timeoutMs: number
-  env: Record<string, string | undefined>
-  cwd?: string
+  execFileImpl: ExecFileFn;
+  cmd: string;
+  args: string[];
+  input: string;
+  timeoutMs: number;
+  env: Record<string, string | undefined>;
+  cwd?: string;
 }): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
     const child = execFileImpl(
@@ -115,196 +114,198 @@ async function execCliWithInput({
       (error, stdout, stderr) => {
         if (error) {
           const stderrText =
-            typeof stderr === 'string' ? stderr : (stderr as Buffer).toString('utf8')
+            typeof stderr === "string" ? stderr : (stderr as Buffer).toString("utf8");
           const message = stderrText.trim()
             ? `${error.message}: ${stderrText.trim()}`
-            : error.message
-          reject(new Error(message, { cause: error }))
-          return
+            : error.message;
+          reject(new Error(message, { cause: error }));
+          return;
         }
-        const stdoutText = typeof stdout === 'string' ? stdout : (stdout as Buffer).toString('utf8')
-        const stderrText = typeof stderr === 'string' ? stderr : (stderr as Buffer).toString('utf8')
-        resolve({ stdout: stdoutText, stderr: stderrText })
-      }
-    )
+        const stdoutText =
+          typeof stdout === "string" ? stdout : (stdout as Buffer).toString("utf8");
+        const stderrText =
+          typeof stderr === "string" ? stderr : (stderr as Buffer).toString("utf8");
+        resolve({ stdout: stdoutText, stderr: stderrText });
+      },
+    );
     if (child.stdin) {
-      child.stdin.write(input)
-      child.stdin.end()
+      child.stdin.write(input);
+      child.stdin.end();
     }
-  })
+  });
 }
 
 const parseJsonFromOutput = (output: string): unknown | null => {
-  const trimmed = output.trim()
-  if (!trimmed) return null
-  if (trimmed.startsWith('{')) {
+  const trimmed = output.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("{")) {
     try {
-      return JSON.parse(trimmed) as unknown
+      return JSON.parse(trimmed) as unknown;
     } catch {
       // fall through
     }
   }
-  const lastBraceIndex = trimmed.lastIndexOf('\n{')
+  const lastBraceIndex = trimmed.lastIndexOf("\n{");
   if (lastBraceIndex >= 0) {
-    const candidate = trimmed.slice(lastBraceIndex + 1).trim()
+    const candidate = trimmed.slice(lastBraceIndex + 1).trim();
     try {
-      return JSON.parse(candidate) as unknown
+      return JSON.parse(candidate) as unknown;
     } catch {
-      return null
+      return null;
     }
   }
-  return null
-}
+  return null;
+};
 
 const toNumber = (value: unknown): number | null => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  return value
-}
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return value;
+};
 
 const parseClaudeUsage = (payload: Record<string, unknown>): LlmTokenUsage | null => {
-  const usage = payload.usage
-  if (!usage || typeof usage !== 'object') return null
-  const usageRecord = usage as Record<string, unknown>
-  const inputTokens = toNumber(usageRecord.input_tokens)
-  const cacheCreationTokens = toNumber(usageRecord.cache_creation_input_tokens) ?? 0
-  const cacheReadTokens = toNumber(usageRecord.cache_read_input_tokens) ?? 0
-  const outputTokens = toNumber(usageRecord.output_tokens)
-  if (inputTokens === null && outputTokens === null) return null
+  const usage = payload.usage;
+  if (!usage || typeof usage !== "object") return null;
+  const usageRecord = usage as Record<string, unknown>;
+  const inputTokens = toNumber(usageRecord.input_tokens);
+  const cacheCreationTokens = toNumber(usageRecord.cache_creation_input_tokens) ?? 0;
+  const cacheReadTokens = toNumber(usageRecord.cache_read_input_tokens) ?? 0;
+  const outputTokens = toNumber(usageRecord.output_tokens);
+  if (inputTokens === null && outputTokens === null) return null;
   const promptTokens =
-    inputTokens !== null ? inputTokens + cacheCreationTokens + cacheReadTokens : null
-  const completionTokens = outputTokens
+    inputTokens !== null ? inputTokens + cacheCreationTokens + cacheReadTokens : null;
+  const completionTokens = outputTokens;
   const totalTokens =
-    typeof promptTokens === 'number' && typeof completionTokens === 'number'
+    typeof promptTokens === "number" && typeof completionTokens === "number"
       ? promptTokens + completionTokens
-      : null
+      : null;
   return {
     promptTokens,
     completionTokens,
     totalTokens,
-  }
-}
+  };
+};
 
 const parseGeminiUsage = (payload: Record<string, unknown>): LlmTokenUsage | null => {
-  const stats = payload.stats
-  if (!stats || typeof stats !== 'object') return null
-  const models = (stats as Record<string, unknown>).models
-  if (!models || typeof models !== 'object') return null
-  let promptSum = 0
-  let completionSum = 0
-  let totalSum = 0
-  let hasPrompt = false
-  let hasCompletion = false
-  let hasTotal = false
+  const stats = payload.stats;
+  if (!stats || typeof stats !== "object") return null;
+  const models = (stats as Record<string, unknown>).models;
+  if (!models || typeof models !== "object") return null;
+  let promptSum = 0;
+  let completionSum = 0;
+  let totalSum = 0;
+  let hasPrompt = false;
+  let hasCompletion = false;
+  let hasTotal = false;
   for (const entry of Object.values(models as Record<string, unknown>)) {
-    if (!entry || typeof entry !== 'object') continue
-    const tokens = (entry as Record<string, unknown>).tokens
-    if (!tokens || typeof tokens !== 'object') continue
-    const prompt = toNumber((tokens as Record<string, unknown>).prompt)
-    const candidates = toNumber((tokens as Record<string, unknown>).candidates)
-    const total = toNumber((tokens as Record<string, unknown>).total)
-    if (typeof prompt === 'number') {
-      promptSum += prompt
-      hasPrompt = true
+    if (!entry || typeof entry !== "object") continue;
+    const tokens = (entry as Record<string, unknown>).tokens;
+    if (!tokens || typeof tokens !== "object") continue;
+    const prompt = toNumber((tokens as Record<string, unknown>).prompt);
+    const candidates = toNumber((tokens as Record<string, unknown>).candidates);
+    const total = toNumber((tokens as Record<string, unknown>).total);
+    if (typeof prompt === "number") {
+      promptSum += prompt;
+      hasPrompt = true;
     }
-    if (typeof candidates === 'number') {
-      completionSum += candidates
-      hasCompletion = true
+    if (typeof candidates === "number") {
+      completionSum += candidates;
+      hasCompletion = true;
     }
-    if (typeof total === 'number') {
-      totalSum += total
-      hasTotal = true
+    if (typeof total === "number") {
+      totalSum += total;
+      hasTotal = true;
     }
   }
-  if (!hasPrompt && !hasCompletion && !hasTotal) return null
-  const promptTokens = hasPrompt ? promptSum : null
-  const completionTokens = hasCompletion ? completionSum : null
+  if (!hasPrompt && !hasCompletion && !hasTotal) return null;
+  const promptTokens = hasPrompt ? promptSum : null;
+  const completionTokens = hasCompletion ? completionSum : null;
   const totalTokens =
     hasTotal && totalSum > 0
       ? totalSum
-      : typeof promptTokens === 'number' && typeof completionTokens === 'number'
+      : typeof promptTokens === "number" && typeof completionTokens === "number"
         ? promptTokens + completionTokens
-        : null
-  return { promptTokens, completionTokens, totalTokens }
-}
+        : null;
+  return { promptTokens, completionTokens, totalTokens };
+};
 
 const parseCodexUsageFromJsonl = (
-  output: string
+  output: string,
 ): { usage: LlmTokenUsage | null; costUsd: number | null } => {
   const lines = output
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-  let usage: LlmTokenUsage | null = null
-  let costUsd: number | null = null
+    .filter((line) => line.length > 0);
+  let usage: LlmTokenUsage | null = null;
+  let costUsd: number | null = null;
   for (const line of lines) {
-    if (!line.startsWith('{')) continue
+    if (!line.startsWith("{")) continue;
     try {
-      const parsed = JSON.parse(line) as Record<string, unknown>
+      const parsed = JSON.parse(line) as Record<string, unknown>;
       const candidates = [
         parsed.usage,
         (parsed.response as Record<string, unknown> | undefined)?.usage,
         (parsed.metrics as Record<string, unknown> | undefined)?.usage,
-      ].filter(Boolean) as Record<string, unknown>[]
+      ].filter(Boolean) as Record<string, unknown>[];
       for (const candidate of candidates) {
         const input =
           toNumber(candidate.input_tokens) ??
           toNumber(candidate.prompt_tokens) ??
           toNumber(candidate.inputTokens) ??
-          null
+          null;
         const outputTokens =
           toNumber(candidate.output_tokens) ??
           toNumber(candidate.completion_tokens) ??
           toNumber(candidate.outputTokens) ??
-          null
+          null;
         const totalTokens =
           toNumber(candidate.total_tokens) ??
           toNumber(candidate.totalTokens) ??
-          (typeof input === 'number' && typeof outputTokens === 'number'
+          (typeof input === "number" && typeof outputTokens === "number"
             ? input + outputTokens
-            : null)
+            : null);
         if (input !== null || outputTokens !== null || totalTokens !== null) {
-          usage = { promptTokens: input, completionTokens: outputTokens, totalTokens }
+          usage = { promptTokens: input, completionTokens: outputTokens, totalTokens };
         }
       }
       if (costUsd === null) {
         const costValue =
           toNumber(parsed.cost_usd) ??
           toNumber((parsed.usage as Record<string, unknown> | undefined)?.cost_usd) ??
-          null
-        if (typeof costValue === 'number') costUsd = costValue
+          null;
+        if (typeof costValue === "number") costUsd = costValue;
       }
     } catch {
       // ignore malformed JSON lines
     }
   }
-  return { usage, costUsd }
-}
+  return { usage, costUsd };
+};
 
 function extractJsonResultText(payload: Record<string, unknown>): string | null {
   for (const key of JSON_RESULT_FIELDS) {
-    const value = payload[key]
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim()
+    const value = payload[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
     }
   }
-  return null
+  return null;
 }
 
 function parseJsonProviderUsage(
   provider: JsonCliProvider,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
 ): LlmTokenUsage | null {
-  if (provider === 'claude') return parseClaudeUsage(payload)
-  if (provider === 'gemini') return parseGeminiUsage(payload)
-  return null
+  if (provider === "claude") return parseClaudeUsage(payload);
+  if (provider === "gemini") return parseGeminiUsage(payload);
+  return null;
 }
 
 function parseJsonProviderCostUsd(
   provider: JsonCliProvider,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
 ): number | null {
-  if (provider !== 'claude') return null
-  return toNumber(payload.total_cost_usd) ?? null
+  if (provider !== "claude") return null;
+  return toNumber(payload.total_cost_usd) ?? null;
 }
 
 function appendJsonProviderArgs({
@@ -314,39 +315,39 @@ function appendJsonProviderArgs({
   model,
   prompt,
 }: {
-  provider: JsonCliProvider
-  args: string[]
-  allowTools: boolean
-  model: string | null
-  prompt: string
+  provider: JsonCliProvider;
+  args: string[];
+  allowTools: boolean;
+  model: string | null;
+  prompt: string;
 }): string {
-  if (provider === 'claude' || provider === 'agent') {
-    args.push('--print')
+  if (provider === "claude" || provider === "agent") {
+    args.push("--print");
   }
-  args.push('--output-format', 'json')
-  if (provider === 'agent' && !allowTools) {
-    args.push('--mode', 'ask')
+  args.push("--output-format", "json");
+  if (provider === "agent" && !allowTools) {
+    args.push("--mode", "ask");
   }
   if (model && model.trim().length > 0) {
-    args.push('--model', model.trim())
+    args.push("--model", model.trim());
   }
   if (allowTools) {
-    if (provider === 'claude') {
-      args.push('--tools', 'Read', '--dangerously-skip-permissions')
+    if (provider === "claude") {
+      args.push("--tools", "Read", "--dangerously-skip-permissions");
     }
-    if (provider === 'gemini') {
-      args.push('--yolo')
+    if (provider === "gemini") {
+      args.push("--yolo");
     }
   }
-  if (provider === 'agent') {
-    args.push(prompt)
-    return ''
+  if (provider === "agent") {
+    args.push(prompt);
+    return "";
   }
-  if (provider === 'gemini') {
-    args.push('--prompt', prompt)
-    return ''
+  if (provider === "gemini") {
+    args.push("--prompt", prompt);
+    return "";
   }
-  return prompt
+  return prompt;
 }
 
 export async function runCliModel({
@@ -361,33 +362,33 @@ export async function runCliModel({
   cwd,
   extraArgs,
 }: RunCliModelOptions): Promise<CliRunResult> {
-  const execFileFn = execFileImpl ?? execFile
-  const binary = resolveCliBinary(provider, config, env)
-  const args: string[] = []
+  const execFileFn = execFileImpl ?? execFile;
+  const binary = resolveCliBinary(provider, config, env);
+  const args: string[] = [];
 
   const effectiveEnv =
-    provider === 'gemini' && !isNonEmptyString(env.GEMINI_CLI_NO_RELAUNCH)
-      ? { ...env, GEMINI_CLI_NO_RELAUNCH: 'true' }
-      : env
+    provider === "gemini" && !isNonEmptyString(env.GEMINI_CLI_NO_RELAUNCH)
+      ? { ...env, GEMINI_CLI_NO_RELAUNCH: "true" }
+      : env;
 
-  const providerConfig = getCliProviderConfig(provider, config)
+  const providerConfig = getCliProviderConfig(provider, config);
 
   if (providerConfig?.extraArgs?.length) {
-    args.push(...providerConfig.extraArgs)
+    args.push(...providerConfig.extraArgs);
   }
   if (extraArgs?.length) {
-    args.push(...extraArgs)
+    args.push(...extraArgs);
   }
-  if (provider === 'codex') {
-    const outputDir = await fs.mkdtemp(path.join(tmpdir(), 'summarize-codex-'))
-    const outputPath = path.join(outputDir, 'last-message.txt')
-    args.push('exec', '--output-last-message', outputPath, '--skip-git-repo-check', '--json')
+  if (provider === "codex") {
+    const outputDir = await fs.mkdtemp(path.join(tmpdir(), "summarize-codex-"));
+    const outputPath = path.join(outputDir, "last-message.txt");
+    args.push("exec", "--output-last-message", outputPath, "--skip-git-repo-check", "--json");
     if (model && model.trim().length > 0) {
-      args.push('-m', model.trim())
+      args.push("-m", model.trim());
     }
-    const hasVerbosityOverride = args.some((arg) => arg.includes('text.verbosity'))
+    const hasVerbosityOverride = args.some((arg) => arg.includes("text.verbosity"));
     if (!hasVerbosityOverride) {
-      args.push('-c', 'text.verbosity="medium"')
+      args.push("-c", 'text.verbosity="medium"');
     }
     const { stdout } = await execCliWithInput({
       execFileImpl: execFileFn,
@@ -397,28 +398,28 @@ export async function runCliModel({
       timeoutMs,
       env: effectiveEnv,
       cwd,
-    })
-    const { usage, costUsd } = parseCodexUsageFromJsonl(stdout)
-    let fileText = ''
+    });
+    const { usage, costUsd } = parseCodexUsageFromJsonl(stdout);
+    let fileText = "";
     try {
-      fileText = (await fs.readFile(outputPath, 'utf8')).trim()
+      fileText = (await fs.readFile(outputPath, "utf8")).trim();
     } catch {
-      fileText = ''
+      fileText = "";
     }
     if (fileText) {
-      return { text: fileText, usage, costUsd }
+      return { text: fileText, usage, costUsd };
     }
-    const stdoutText = stdout.trim()
+    const stdoutText = stdout.trim();
     if (stdoutText) {
-      return { text: stdoutText, usage, costUsd }
+      return { text: stdoutText, usage, costUsd };
     }
-    throw new Error('CLI returned empty output')
+    throw new Error("CLI returned empty output");
   }
 
   if (!isJsonCliProvider(provider)) {
-    throw new Error(`Unsupported CLI provider "${provider}".`)
+    throw new Error(`Unsupported CLI provider "${provider}".`);
   }
-  const input = appendJsonProviderArgs({ provider, args, allowTools, model, prompt })
+  const input = appendJsonProviderArgs({ provider, args, allowTools, model, prompt });
 
   const { stdout } = await execCliWithInput({
     execFileImpl: execFileFn,
@@ -428,20 +429,20 @@ export async function runCliModel({
     timeoutMs,
     env: effectiveEnv,
     cwd,
-  })
-  const trimmed = stdout.trim()
+  });
+  const trimmed = stdout.trim();
   if (!trimmed) {
-    throw new Error('CLI returned empty output')
+    throw new Error("CLI returned empty output");
   }
-  const parsed = parseJsonFromOutput(trimmed)
-  if (parsed && typeof parsed === 'object') {
-    const payload = parsed as Record<string, unknown>
-    const resultText = extractJsonResultText(payload)
+  const parsed = parseJsonFromOutput(trimmed);
+  if (parsed && typeof parsed === "object") {
+    const payload = parsed as Record<string, unknown>;
+    const resultText = extractJsonResultText(payload);
     if (resultText) {
-      const usage = parseJsonProviderUsage(provider, payload)
-      const costUsd = parseJsonProviderCostUsd(provider, payload)
-      return { text: resultText, usage, costUsd }
+      const usage = parseJsonProviderUsage(provider, payload);
+      const costUsd = parseJsonProviderCostUsd(provider, payload);
+      return { text: resultText, usage, costUsd };
     }
   }
-  return { text: trimmed, usage: null, costUsd: null }
+  return { text: trimmed, usage: null, costUsd: null };
 }

@@ -1,50 +1,49 @@
-import { describe, expect, it } from 'vitest'
-
+import { describe, expect, it } from "vitest";
 import {
   extractTranscriptFromTranscriptEndpoint,
   extractYoutubeiBootstrap,
   extractYoutubeiTranscriptConfig,
   fetchTranscriptFromTranscriptEndpoint,
-} from '../packages/core/src/content/transcript/providers/youtube/api.js'
+} from "../packages/core/src/content/transcript/providers/youtube/api.js";
 
-describe('YouTube transcript parsing', () => {
-  it('extracts youtubei transcript config from bootstrap HTML', () => {
+describe("YouTube transcript parsing", () => {
+  it("extracts youtubei transcript config from bootstrap HTML", () => {
     const html =
-      '<!doctype html><html><head>' +
+      "<!doctype html><html><head>" +
       '<script>ytcfg.set({"INNERTUBE_API_KEY":"TEST_KEY","INNERTUBE_CONTEXT":{"client":{"clientName":"WEB","clientVersion":"1.0"}}});</script>' +
       '<script>var ytInitialPlayerResponse = {"getTranscriptEndpoint":{"params":"TEST_PARAMS"}};</script>' +
-      '</head><body></body></html>'
+      "</head><body></body></html>";
 
-    const config = extractYoutubeiTranscriptConfig(html)
+    const config = extractYoutubeiTranscriptConfig(html);
     expect(config).toEqual(
       expect.objectContaining({
-        apiKey: 'TEST_KEY',
-        params: 'TEST_PARAMS',
-      })
-    )
-  })
+        apiKey: "TEST_KEY",
+        params: "TEST_PARAMS",
+      }),
+    );
+  });
 
-  it('returns null for transcript config when bootstrap or params are missing', () => {
-    expect(extractYoutubeiTranscriptConfig('<html></html>')).toBeNull()
+  it("returns null for transcript config when bootstrap or params are missing", () => {
+    expect(extractYoutubeiTranscriptConfig("<html></html>")).toBeNull();
 
     const missingParams =
-      '<!doctype html><html><head>' +
+      "<!doctype html><html><head>" +
       '<script>ytcfg.set({"INNERTUBE_API_KEY":"TEST_KEY","INNERTUBE_CONTEXT":{"client":{"clientName":"WEB","clientVersion":"1.0"}}});</script>' +
-      '</head><body></body></html>'
-    expect(extractYoutubeiTranscriptConfig(missingParams)).toBeNull()
+      "</head><body></body></html>";
+    expect(extractYoutubeiTranscriptConfig(missingParams)).toBeNull();
 
     const missingContext =
-      '<!doctype html><html><head>' +
+      "<!doctype html><html><head>" +
       '<script>ytcfg.set({"INNERTUBE_API_KEY":"TEST_KEY","INNERTUBE_CONTEXT":"nope"});</script>' +
       '<script>var ytInitialPlayerResponse = {"getTranscriptEndpoint":{"params":"TEST_PARAMS"}};</script>' +
-      '</head><body></body></html>'
-    expect(extractYoutubeiTranscriptConfig(missingContext)).toBeNull()
-  })
+      "</head><body></body></html>";
+    expect(extractYoutubeiTranscriptConfig(missingContext)).toBeNull();
+  });
 
-  it('prefers VISITOR_DATA and normalizes client name from bootstrap', () => {
+  it("prefers VISITOR_DATA and normalizes client name from bootstrap", () => {
     const html =
-      '<!doctype html><html><head>' +
-      '<script>ytcfg.set({' +
+      "<!doctype html><html><head>" +
+      "<script>ytcfg.set({" +
       '"INNERTUBE_API_KEY":"TEST_KEY",' +
       '"INNERTUBE_CONTEXT":{"client":{"clientName":"WEB","clientVersion":"1.0","visitorData":"CTX_VISITOR"}},' +
       '"VISITOR_DATA":"BOOTSTRAP_VISITOR",' +
@@ -52,30 +51,30 @@ describe('YouTube transcript parsing', () => {
       '"INNERTUBE_CONTEXT_CLIENT_VERSION":"2.0",' +
       '"PAGE_CL":123,' +
       '"PAGE_BUILD_LABEL":"test-label"' +
-      '});</script>' +
+      "});</script>" +
       '<script>var ytInitialPlayerResponse = {"getTranscriptEndpoint":{"params":"TEST_PARAMS"}};</script>' +
-      '</head><body></body></html>'
+      "</head><body></body></html>";
 
-    const config = extractYoutubeiTranscriptConfig(html)
+    const config = extractYoutubeiTranscriptConfig(html);
     expect(config).toEqual(
       expect.objectContaining({
-        apiKey: 'TEST_KEY',
-        params: 'TEST_PARAMS',
-        visitorData: 'BOOTSTRAP_VISITOR',
-        clientName: '1',
-        clientVersion: '2.0',
+        apiKey: "TEST_KEY",
+        params: "TEST_PARAMS",
+        visitorData: "BOOTSTRAP_VISITOR",
+        clientName: "1",
+        clientVersion: "2.0",
         pageCl: 123,
-        pageLabel: 'test-label',
-      })
-    )
-  })
+        pageLabel: "test-label",
+      }),
+    );
+  });
 
-  it('returns null when transcript payload is missing segments', () => {
-    expect(extractTranscriptFromTranscriptEndpoint({ actions: [] })).toBeNull()
-    expect(extractTranscriptFromTranscriptEndpoint(null)).toBeNull()
-  })
+  it("returns null when transcript payload is missing segments", () => {
+    expect(extractTranscriptFromTranscriptEndpoint({ actions: [] })).toBeNull();
+    expect(extractTranscriptFromTranscriptEndpoint(null)).toBeNull();
+  });
 
-  it('extracts transcript lines from youtubei payload', () => {
+  it("extracts transcript lines from youtubei payload", () => {
     const payload = {
       actions: [
         {
@@ -89,16 +88,16 @@ describe('YouTube transcript parsing', () => {
                         initialSegments: [
                           {
                             transcriptSegmentRenderer: {
-                              snippet: { runs: [{ text: 'Line 1' }] },
-                              startMs: '1000',
-                              durationMs: '2000',
+                              snippet: { runs: [{ text: "Line 1" }] },
+                              startMs: "1000",
+                              durationMs: "2000",
                             },
                           },
                           {
                             transcriptSegmentRenderer: {
-                              snippet: { runs: [{ text: 'Line 2' }] },
-                              startMs: '3000',
-                              durationMs: '1500',
+                              snippet: { runs: [{ text: "Line 2" }] },
+                              startMs: "3000",
+                              durationMs: "1500",
                             },
                           },
                         ],
@@ -111,29 +110,29 @@ describe('YouTube transcript parsing', () => {
           },
         },
       ],
-    }
+    };
 
-    const transcript = extractTranscriptFromTranscriptEndpoint(payload)
-    expect(transcript?.text).toBe('Line 1\nLine 2')
+    const transcript = extractTranscriptFromTranscriptEndpoint(payload);
+    expect(transcript?.text).toBe("Line 1\nLine 2");
     expect(transcript?.segments).toEqual([
-      { startMs: 1000, endMs: 3000, text: 'Line 1' },
-      { startMs: 3000, endMs: 4500, text: 'Line 2' },
-    ])
-  })
+      { startMs: 1000, endMs: 3000, text: "Line 1" },
+      { startMs: 3000, endMs: 4500, text: "Line 2" },
+    ]);
+  });
 
-  it('fetches transcript endpoint and returns null for non-2xx/invalid JSON', async () => {
+  it("fetches transcript endpoint and returns null for non-2xx/invalid JSON", async () => {
     const fetchOk = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.url
-      if (!url.includes('youtubei/v1/get_transcript')) {
-        throw new Error(`Unexpected fetch call: ${url}`)
+      const url = typeof input === "string" ? input : input.url;
+      if (!url.includes("youtubei/v1/get_transcript")) {
+        throw new Error(`Unexpected fetch call: ${url}`);
       }
 
-      const headers = init?.headers as Record<string, string>
-      expect(headers['X-Youtube-Client-Name']).toBe('1')
-      expect(headers['X-Youtube-Client-Version']).toBe('2.0')
-      expect(headers['X-Goog-Visitor-Id']).toBe('VISITOR')
-      expect(headers['X-Youtube-Page-CL']).toBe('99')
-      expect(headers['X-Youtube-Page-Label']).toBe('label')
+      const headers = init?.headers as Record<string, string>;
+      expect(headers["X-Youtube-Client-Name"]).toBe("1");
+      expect(headers["X-Youtube-Client-Version"]).toBe("2.0");
+      expect(headers["X-Goog-Visitor-Id"]).toBe("VISITOR");
+      expect(headers["X-Youtube-Page-CL"]).toBe("99");
+      expect(headers["X-Youtube-Page-Label"]).toBe("label");
 
       return Response.json(
         {
@@ -149,7 +148,7 @@ describe('YouTube transcript parsing', () => {
                             initialSegments: [
                               {
                                 transcriptSegmentRenderer: {
-                                  snippet: { runs: [{ text: 'Hello' }] },
+                                  snippet: { runs: [{ text: "Hello" }] },
                                 },
                               },
                             ],
@@ -163,57 +162,57 @@ describe('YouTube transcript parsing', () => {
             },
           ],
         },
-        { status: 200 }
-      )
-    }
+        { status: 200 },
+      );
+    };
 
     const config = {
-      apiKey: 'TEST_KEY',
+      apiKey: "TEST_KEY",
       context: { client: {} },
-      params: 'P',
-      clientName: '1',
-      clientVersion: '2.0',
-      visitorData: 'VISITOR',
+      params: "P",
+      clientName: "1",
+      clientVersion: "2.0",
+      visitorData: "VISITOR",
       pageCl: 99,
-      pageLabel: 'label',
-    }
+      pageLabel: "label",
+    };
 
     const transcript = await fetchTranscriptFromTranscriptEndpoint(
       fetchOk as unknown as typeof fetch,
       {
         config,
-        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      }
-    )
-    expect(transcript?.text).toBe('Hello')
+        originalUrl: "https://www.youtube.com/watch?v=abcdefghijk",
+      },
+    );
+    expect(transcript?.text).toBe("Hello");
 
-    const fetchNotOk = async () => new Response('nope', { status: 403 })
+    const fetchNotOk = async () => new Response("nope", { status: 403 });
     expect(
       await fetchTranscriptFromTranscriptEndpoint(fetchNotOk as unknown as typeof fetch, {
         config,
-        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      })
-    ).toBeNull()
+        originalUrl: "https://www.youtube.com/watch?v=abcdefghijk",
+      }),
+    ).toBeNull();
 
-    const fetchBadJson = async () => new Response('nope', { status: 200 })
+    const fetchBadJson = async () => new Response("nope", { status: 200 });
     expect(
       await fetchTranscriptFromTranscriptEndpoint(fetchBadJson as unknown as typeof fetch, {
         config,
-        originalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
-      })
-    ).toBeNull()
-  })
+        originalUrl: "https://www.youtube.com/watch?v=abcdefghijk",
+      }),
+    ).toBeNull();
+  });
 
-  it('extracts youtubei bootstrap fields when present and returns null for invalid context', () => {
+  it("extracts youtubei bootstrap fields when present and returns null for invalid context", () => {
     const invalid =
-      '<!doctype html><html><head>' +
+      "<!doctype html><html><head>" +
       '<script>ytcfg.set({"INNERTUBE_CONTEXT":"nope"});</script>' +
-      '</head><body></body></html>'
-    expect(extractYoutubeiBootstrap(invalid)).toBeNull()
+      "</head><body></body></html>";
+    expect(extractYoutubeiBootstrap(invalid)).toBeNull();
 
     const html =
-      '<!doctype html><html><head>' +
-      '<script>ytcfg.set({' +
+      "<!doctype html><html><head>" +
+      "<script>ytcfg.set({" +
       '"INNERTUBE_API_KEY":"TEST_KEY",' +
       '"INNERTUBE_CONTEXT":{"client":{"clientName":"WEB","clientVersion":"1.0","visitorData":"CTX_VISITOR"}},' +
       '"INNERTUBE_CLIENT_VERSION":"9.9",' +
@@ -221,20 +220,20 @@ describe('YouTube transcript parsing', () => {
       '"PAGE_CL":123,' +
       '"PAGE_BUILD_LABEL":"label",' +
       '"XSRF_TOKEN":"xsrf"' +
-      '});</script>' +
-      '</head><body></body></html>'
+      "});</script>" +
+      "</head><body></body></html>";
 
-    const bootstrap = extractYoutubeiBootstrap(html)
+    const bootstrap = extractYoutubeiBootstrap(html);
     expect(bootstrap).toEqual(
       expect.objectContaining({
-        apiKey: 'TEST_KEY',
-        clientVersion: '9.9',
-        clientName: 'WEB',
-        visitorData: 'CTX_VISITOR',
+        apiKey: "TEST_KEY",
+        clientVersion: "9.9",
+        clientName: "WEB",
+        visitorData: "CTX_VISITOR",
         pageCl: 123,
-        pageLabel: 'label',
-        xsrfToken: 'xsrf',
-      })
-    )
-  })
-})
+        pageLabel: "label",
+        xsrfToken: "xsrf",
+      }),
+    );
+  });
+});

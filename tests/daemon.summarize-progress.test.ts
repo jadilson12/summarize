@@ -1,31 +1,30 @@
-import { type LinkPreviewProgressEvent, ProgressKind } from '@steipete/summarize-core/content'
-import { describe, expect, it } from 'vitest'
+import { type LinkPreviewProgressEvent, ProgressKind } from "@steipete/summarize-core/content";
+import { describe, expect, it } from "vitest";
+import { formatProgress } from "../src/daemon/summarize-progress.js";
 
-import { formatProgress } from '../src/daemon/summarize-progress.js'
-
-describe('daemon/summarize-progress', () => {
-  it('formats link preview progress events', () => {
-    const service = 'YouTube'
+describe("daemon/summarize-progress", () => {
+  it("formats link preview progress events", () => {
+    const service = "YouTube";
 
     const cases: Array<[LinkPreviewProgressEvent, string | null]> = [
-      [{ kind: ProgressKind.FetchHtmlStart } as LinkPreviewProgressEvent, 'Fetching…'],
+      [{ kind: ProgressKind.FetchHtmlStart } as LinkPreviewProgressEvent, "Fetching…"],
       [
-        { kind: ProgressKind.FirecrawlStart, reason: 'blocked' } as LinkPreviewProgressEvent,
-        'Firecrawl… (blocked)',
+        { kind: ProgressKind.FirecrawlStart, reason: "blocked" } as LinkPreviewProgressEvent,
+        "Firecrawl… (blocked)",
       ],
       [
         { kind: ProgressKind.FirecrawlDone, ok: true } as LinkPreviewProgressEvent,
-        'Firecrawl: done',
+        "Firecrawl: done",
       ],
       [
         { kind: ProgressKind.FirecrawlDone, ok: false } as LinkPreviewProgressEvent,
-        'Firecrawl: failed',
+        "Firecrawl: failed",
       ],
       [
-        { kind: ProgressKind.TranscriptStart, hint: 'Captions…' } as LinkPreviewProgressEvent,
-        'Captions…',
+        { kind: ProgressKind.TranscriptStart, hint: "Captions…" } as LinkPreviewProgressEvent,
+        "Captions…",
       ],
-      [{ kind: ProgressKind.TranscriptStart, hint: '' } as LinkPreviewProgressEvent, 'Transcript…'],
+      [{ kind: ProgressKind.TranscriptStart, hint: "" } as LinkPreviewProgressEvent, "Transcript…"],
       [
         { kind: ProgressKind.TranscriptMediaDownloadStart, service } as LinkPreviewProgressEvent,
         `${service}: downloading audio…`,
@@ -68,26 +67,26 @@ describe('daemon/summarize-progress', () => {
         { kind: ProgressKind.TranscriptDone, service, ok: false } as LinkPreviewProgressEvent,
         `${service}: transcript unavailable`,
       ],
-      [{ kind: ProgressKind.BirdStart } as LinkPreviewProgressEvent, 'X: extracting tweet (bird)…'],
-      [{ kind: ProgressKind.BirdDone, ok: true } as LinkPreviewProgressEvent, 'X: extracted tweet'],
-      [{ kind: ProgressKind.BirdDone, ok: false } as LinkPreviewProgressEvent, 'X: extract failed'],
+      [{ kind: ProgressKind.BirdStart } as LinkPreviewProgressEvent, "X: extracting tweet (bird)…"],
+      [{ kind: ProgressKind.BirdDone, ok: true } as LinkPreviewProgressEvent, "X: extracted tweet"],
+      [{ kind: ProgressKind.BirdDone, ok: false } as LinkPreviewProgressEvent, "X: extract failed"],
       [
         { kind: ProgressKind.NitterStart } as LinkPreviewProgressEvent,
-        'X: extracting tweet (nitter)…',
+        "X: extracting tweet (nitter)…",
       ],
       [
         { kind: ProgressKind.NitterDone, ok: true } as LinkPreviewProgressEvent,
-        'X: extracted tweet',
+        "X: extracted tweet",
       ],
       [
         { kind: ProgressKind.NitterDone, ok: false } as LinkPreviewProgressEvent,
-        'X: extract failed',
+        "X: extract failed",
       ],
-      [{ kind: 'unknown' as unknown as ProgressKind } as LinkPreviewProgressEvent, null],
-    ]
+      [{ kind: "unknown" as unknown as ProgressKind } as LinkPreviewProgressEvent, null],
+    ];
 
     for (const [evt, expected] of cases) {
-      expect(formatProgress(evt)).toBe(expected)
+      expect(formatProgress(evt)).toBe(expected);
     }
-  })
-})
+  });
+});

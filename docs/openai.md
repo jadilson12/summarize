@@ -1,7 +1,7 @@
 ---
-summary: 'OpenAI model usage and flags.'
+summary: "OpenAI model usage and flags."
 read_when:
-  - 'When changing OpenAI integration.'
+  - "When changing OpenAI integration."
 ---
 
 # OpenAI models

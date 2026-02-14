@@ -4,48 +4,48 @@ import {
   listArtifacts,
   parseArtifact,
   upsertArtifact,
-} from './artifacts-store'
-import { executeNavigateTool } from './navigate'
-import { listSkills } from './skills-store'
-import { buildUserScriptsGuidance, getUserScriptsStatus } from './userscripts'
+} from "./artifacts-store";
+import { executeNavigateTool } from "./navigate";
+import { listSkills } from "./skills-store";
+import { buildUserScriptsGuidance, getUserScriptsStatus } from "./userscripts";
 
 export type ReplArgs = {
-  title: string
-  code: string
-}
+  title: string;
+  code: string;
+};
 
 export type SandboxFile = {
-  fileName: string
-  mimeType: string
-  contentBase64: string
-}
+  fileName: string;
+  mimeType: string;
+  contentBase64: string;
+};
 
-let activeAbortController: AbortController | null = null
-let replAbortListenerAttached = false
+let activeAbortController: AbortController | null = null;
+let replAbortListenerAttached = false;
 
 function ensureReplAbortListener() {
-  if (replAbortListenerAttached) return
-  replAbortListenerAttached = true
+  if (replAbortListenerAttached) return;
+  replAbortListenerAttached = true;
   chrome.runtime.onMessage.addListener((raw) => {
-    if (!raw || typeof raw !== 'object') return
-    const type = (raw as { type?: string }).type
-    if (type === 'automation:abort-repl' || type === 'automation:abort-agent') {
-      activeAbortController?.abort()
+    if (!raw || typeof raw !== "object") return;
+    const type = (raw as { type?: string }).type;
+    if (type === "automation:abort-repl" || type === "automation:abort-agent") {
+      activeAbortController?.abort();
     }
-  })
+  });
 }
 
 type BrowserJsResult = {
-  ok: boolean
-  value?: unknown
-  logs?: string[]
-  error?: string
-}
+  ok: boolean;
+  value?: unknown;
+  logs?: string[];
+  error?: string;
+};
 
 type ReplResult = {
-  output: string
-  files?: SandboxFile[]
-}
+  output: string;
+  files?: SandboxFile[];
+};
 
 const NAVIGATION_PATTERNS = [
   /\bwindow\.location\s*=\s*['"`]/i,
@@ -58,12 +58,12 @@ const NAVIGATION_PATTERNS = [
   /\bhistory\.back\s*\(/i,
   /\bhistory\.forward\s*\(/i,
   /\bhistory\.go\s*\(/i,
-]
+];
 
 function validateReplCode(code: string): void {
   for (const pattern of NAVIGATION_PATTERNS) {
     if (pattern.test(code)) {
-      throw new Error('Use navigate() instead of window.location/history inside REPL code.')
+      throw new Error("Use navigate() instead of window.location/history inside REPL code.");
     }
   }
 }
@@ -72,8 +72,8 @@ async function ensureAutomationContentScript(tabId: number): Promise<void> {
   try {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ['content-scripts/automation.js'],
-    })
+      files: ["content-scripts/automation.js"],
+    });
   } catch {
     // ignore
   }
@@ -81,119 +81,120 @@ async function ensureAutomationContentScript(tabId: number): Promise<void> {
 
 async function sendReplOverlay(
   tabId: number,
-  action: 'show' | 'hide',
-  message?: string
+  action: "show" | "hide",
+  message?: string,
 ): Promise<void> {
   try {
     await chrome.tabs.sendMessage(tabId, {
-      type: 'automation:repl-overlay',
+      type: "automation:repl-overlay",
       action,
       message: message ?? null,
-    })
-    return
+    });
+    return;
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
+    const msg = error instanceof Error ? error.message : String(error);
     const noReceiver =
-      msg.includes('Receiving end does not exist') || msg.includes('Could not establish connection')
-    if (!noReceiver) return
+      msg.includes("Receiving end does not exist") ||
+      msg.includes("Could not establish connection");
+    if (!noReceiver) return;
   }
 
-  await ensureAutomationContentScript(tabId)
-  await new Promise((resolve) => setTimeout(resolve, 120))
+  await ensureAutomationContentScript(tabId);
+  await new Promise((resolve) => setTimeout(resolve, 120));
   try {
     await chrome.tabs.sendMessage(tabId, {
-      type: 'automation:repl-overlay',
+      type: "automation:repl-overlay",
       action,
       message: message ?? null,
-    })
+    });
   } catch {
     // ignore
   }
 }
 
 async function hasDebuggerPermission(): Promise<boolean> {
-  return chrome.permissions.contains({ permissions: ['debugger'] })
+  return chrome.permissions.contains({ permissions: ["debugger"] });
 }
 
 async function runBrowserJs(
   fnSource: string,
   args: unknown[] = [],
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<BrowserJsResult> {
   if (signal?.aborted) {
-    return { ok: false, error: 'Execution aborted' }
+    return { ok: false, error: "Execution aborted" };
   }
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  if (!tab?.id) throw new Error('No active tab')
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error("No active tab");
 
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ['content-scripts/automation.js'],
-    })
+      files: ["content-scripts/automation.js"],
+    });
   } catch {
     // ignore (optional; used for native input bridge + picker)
   }
 
-  const skills = await listSkills(tab.url ?? undefined)
-  const libraries = skills.map((skill) => skill.library).filter(Boolean)
-  const nativeInputEnabled = await hasDebuggerPermission()
+  const skills = await listSkills(tab.url ?? undefined);
+  const libraries = skills.map((skill) => skill.library).filter(Boolean);
+  const nativeInputEnabled = await hasDebuggerPermission();
 
   const userScripts = chrome.userScripts as
     | {
         execute?: (options: {
-          target: { tabId: number; allFrames?: boolean }
-          world: 'USER_SCRIPT'
-          worldId?: string
-          injectImmediately?: boolean
-          js: Array<{ code: string }>
-        }) => Promise<Array<{ result?: unknown }>>
+          target: { tabId: number; allFrames?: boolean };
+          world: "USER_SCRIPT";
+          worldId?: string;
+          injectImmediately?: boolean;
+          js: Array<{ code: string }>;
+        }) => Promise<Array<{ result?: unknown }>>;
         configureWorld?: (options: {
-          worldId: string
-          messaging?: boolean
-          csp?: string
-        }) => Promise<void>
+          worldId: string;
+          messaging?: boolean;
+          csp?: string;
+        }) => Promise<void>;
       }
-    | undefined
+    | undefined;
   // userScripts is required for main-world execution; isolated-world fallback is intentionally avoided.
-  const status = await getUserScriptsStatus()
+  const status = await getUserScriptsStatus();
   if (!userScripts?.execute || !status.apiAvailable) {
-    throw new Error(buildUserScriptsGuidance(status))
+    throw new Error(buildUserScriptsGuidance(status));
   }
   if (!status.permissionGranted) {
-    throw new Error(buildUserScriptsGuidance(status))
+    throw new Error(buildUserScriptsGuidance(status));
   }
 
   const terminate =
     // @ts-expect-error - terminate is not yet in the type definitions
-    typeof chrome.userScripts?.terminate === 'function'
+    typeof chrome.userScripts?.terminate === "function"
       ? // @ts-expect-error - terminate is not yet in the type definitions
         chrome.userScripts.terminate.bind(chrome.userScripts)
-      : null
+      : null;
 
-  const executionId = terminate ? crypto.randomUUID() : undefined
-  let abortHandler: (() => void) | null = null
+  const executionId = terminate ? crypto.randomUUID() : undefined;
+  let abortHandler: (() => void) | null = null;
 
   if (signal && executionId && terminate) {
     abortHandler = () => {
       try {
-        terminate(tab.id, executionId)
+        terminate(tab.id, executionId);
       } catch {
         // ignore
       }
-    }
-    signal.addEventListener('abort', abortHandler, { once: true })
+    };
+    signal.addEventListener("abort", abortHandler, { once: true });
   }
 
   const argsJson = (() => {
     try {
-      return JSON.stringify(args ?? [])
+      return JSON.stringify(args ?? []);
     } catch {
-      return '[]'
+      return "[]";
     }
-  })()
+  })();
 
-  const libs = libraries.filter(Boolean).join('\n')
+  const libs = libraries.filter(Boolean).join("\n");
   const wrapperCode = `
       (async () => {
         const logs = []
@@ -207,7 +208,7 @@ async function runBrowserJs(
         }
 
         const postNativeInput = (payload) => {
-          if (!${nativeInputEnabled ? 'true' : 'false'}) {
+          if (!${nativeInputEnabled ? "true" : "false"}) {
             throw new Error('Native input requires debugger permission')
           }
           return new Promise((resolve, reject) => {
@@ -298,35 +299,35 @@ async function runBrowserJs(
           console.log = originalLog
         }
       })()
-    `
+    `;
 
   try {
     await userScripts.configureWorld?.({
-      worldId: 'summarize-browserjs',
+      worldId: "summarize-browserjs",
       messaging: false,
       csp: "script-src 'unsafe-eval' 'unsafe-inline'; connect-src 'none'; img-src 'none'; media-src 'none'; frame-src 'none'; font-src 'none'; object-src 'none'; default-src 'none';",
-    })
+    });
   } catch {
     // ignore
   }
 
   const results = await userScripts.execute({
     target: { tabId: tab.id },
-    world: 'USER_SCRIPT',
-    worldId: 'summarize-browserjs',
+    world: "USER_SCRIPT",
+    worldId: "summarize-browserjs",
     injectImmediately: true,
     js: [{ code: wrapperCode }],
     ...(executionId ? { executionId } : {}),
-  })
+  });
 
   if (signal?.aborted) {
-    if (abortHandler) signal.removeEventListener('abort', abortHandler)
-    return { ok: false, error: 'Execution aborted' }
+    if (abortHandler) signal.removeEventListener("abort", abortHandler);
+    return { ok: false, error: "Execution aborted" };
   }
 
-  const result = results?.[0]?.result as BrowserJsResult | undefined
-  if (abortHandler) signal?.removeEventListener('abort', abortHandler)
-  return result ?? { ok: false, error: 'No result from browserjs()' }
+  const result = results?.[0]?.result as BrowserJsResult | undefined;
+  if (abortHandler) signal?.removeEventListener("abort", abortHandler);
+  return result ?? { ok: false, error: "No result from browserjs()" };
 }
 
 function buildSandboxHtml(): string {
@@ -492,223 +493,223 @@ function buildSandboxHtml(): string {
         </script>
       </body>
     </html>
-  `
+  `;
 }
 
 async function runSandboxedRepl(
   code: string,
   handlers: {
-    onBrowserJs: (payload: { fnSource: string; args: unknown[] }) => Promise<unknown>
-    onNavigate: (payload: { url: string; newTab?: boolean }) => Promise<unknown>
+    onBrowserJs: (payload: { fnSource: string; args: unknown[] }) => Promise<unknown>;
+    onNavigate: (payload: { url: string; newTab?: boolean }) => Promise<unknown>;
     onArtifacts: (payload: {
-      action: 'list' | 'get' | 'upsert' | 'delete'
-      fileName?: string
-      content?: unknown
-      mimeType?: string
-      asBase64?: boolean
-    }) => Promise<unknown>
+      action: "list" | "get" | "upsert" | "delete";
+      fileName?: string;
+      content?: unknown;
+      mimeType?: string;
+      asBase64?: boolean;
+    }) => Promise<unknown>;
   },
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<{ logs: string[]; files: SandboxFile[]; error?: string }> {
-  const iframe = document.createElement('iframe')
-  iframe.setAttribute('sandbox', 'allow-scripts')
-  iframe.style.display = 'none'
-  iframe.srcdoc = buildSandboxHtml()
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("sandbox", "allow-scripts");
+  iframe.style.display = "none";
+  iframe.srcdoc = buildSandboxHtml();
 
-  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   return new Promise((resolve) => {
     const abortHandler = () => {
-      cleanup()
-      resolve({ logs: [], files: [], error: 'Execution aborted' })
-    }
+      cleanup();
+      resolve({ logs: [], files: [], error: "Execution aborted" });
+    };
 
     const cleanup = () => {
       if (signal) {
-        signal.removeEventListener('abort', abortHandler)
+        signal.removeEventListener("abort", abortHandler);
       }
-      window.removeEventListener('message', onMessage)
-      iframe.remove()
-    }
+      window.removeEventListener("message", onMessage);
+      iframe.remove();
+    };
 
     const sendExecute = () => {
       iframe.contentWindow?.postMessage(
-        { source: 'summarize-repl', type: 'execute', requestId, code },
-        '*'
-      )
-    }
+        { source: "summarize-repl", type: "execute", requestId, code },
+        "*",
+      );
+    };
 
     const onMessage = (event: MessageEvent) => {
-      if (event.source !== iframe.contentWindow) return
+      if (event.source !== iframe.contentWindow) return;
       const data = event.data as {
-        source?: string
-        type?: string
-        requestId?: string
-        action?: string
-        payload?: unknown
-        ok?: boolean
-        result?: unknown
-        error?: string
-        logs?: string[]
-        files?: SandboxFile[]
-      }
-      if (data?.source !== 'summarize-repl') return
-      if (data.type === 'rpc' && data.requestId) {
+        source?: string;
+        type?: string;
+        requestId?: string;
+        action?: string;
+        payload?: unknown;
+        ok?: boolean;
+        result?: unknown;
+        error?: string;
+        logs?: string[];
+        files?: SandboxFile[];
+      };
+      if (data?.source !== "summarize-repl") return;
+      if (data.type === "rpc" && data.requestId) {
         const handle = async () => {
           try {
-            if (data.action === 'browserjs') {
+            if (data.action === "browserjs") {
               const result = await handlers.onBrowserJs(
-                data.payload as { fnSource: string; args: unknown[] }
-              )
+                data.payload as { fnSource: string; args: unknown[] },
+              );
               iframe.contentWindow?.postMessage(
                 {
-                  source: 'summarize-repl',
-                  type: 'rpc-result',
+                  source: "summarize-repl",
+                  type: "rpc-result",
                   requestId: data.requestId,
                   ok: true,
                   result,
                 },
-                '*'
-              )
-            } else if (data.action === 'navigate') {
+                "*",
+              );
+            } else if (data.action === "navigate") {
               const result = await handlers.onNavigate(
-                data.payload as { url: string; newTab?: boolean }
-              )
+                data.payload as { url: string; newTab?: boolean },
+              );
               iframe.contentWindow?.postMessage(
                 {
-                  source: 'summarize-repl',
-                  type: 'rpc-result',
+                  source: "summarize-repl",
+                  type: "rpc-result",
                   requestId: data.requestId,
                   ok: true,
                   result,
                 },
-                '*'
-              )
-            } else if (data.action === 'listArtifacts') {
-              const result = await handlers.onArtifacts({ action: 'list' })
+                "*",
+              );
+            } else if (data.action === "listArtifacts") {
+              const result = await handlers.onArtifacts({ action: "list" });
               iframe.contentWindow?.postMessage(
                 {
-                  source: 'summarize-repl',
-                  type: 'rpc-result',
+                  source: "summarize-repl",
+                  type: "rpc-result",
                   requestId: data.requestId,
                   ok: true,
                   result,
                 },
-                '*'
-              )
-            } else if (data.action === 'getArtifact') {
+                "*",
+              );
+            } else if (data.action === "getArtifact") {
               const result = await handlers.onArtifacts({
-                action: 'get',
+                action: "get",
                 ...(data.payload as { fileName?: string; asBase64?: boolean }),
-              })
+              });
               iframe.contentWindow?.postMessage(
                 {
-                  source: 'summarize-repl',
-                  type: 'rpc-result',
+                  source: "summarize-repl",
+                  type: "rpc-result",
                   requestId: data.requestId,
                   ok: true,
                   result,
                 },
-                '*'
-              )
-            } else if (data.action === 'createOrUpdateArtifact') {
+                "*",
+              );
+            } else if (data.action === "createOrUpdateArtifact") {
               const result = await handlers.onArtifacts({
-                action: 'upsert',
+                action: "upsert",
                 ...(data.payload as { fileName?: string; content?: unknown; mimeType?: string }),
-              })
+              });
               iframe.contentWindow?.postMessage(
                 {
-                  source: 'summarize-repl',
-                  type: 'rpc-result',
+                  source: "summarize-repl",
+                  type: "rpc-result",
                   requestId: data.requestId,
                   ok: true,
                   result,
                 },
-                '*'
-              )
-            } else if (data.action === 'deleteArtifact') {
+                "*",
+              );
+            } else if (data.action === "deleteArtifact") {
               const result = await handlers.onArtifacts({
-                action: 'delete',
+                action: "delete",
                 ...(data.payload as { fileName?: string }),
-              })
+              });
               iframe.contentWindow?.postMessage(
                 {
-                  source: 'summarize-repl',
-                  type: 'rpc-result',
+                  source: "summarize-repl",
+                  type: "rpc-result",
                   requestId: data.requestId,
                   ok: true,
                   result,
                 },
-                '*'
-              )
+                "*",
+              );
             } else {
               iframe.contentWindow?.postMessage(
                 {
-                  source: 'summarize-repl',
-                  type: 'rpc-result',
+                  source: "summarize-repl",
+                  type: "rpc-result",
                   requestId: data.requestId,
                   ok: false,
                   error: `Unknown action: ${data.action}`,
                 },
-                '*'
-              )
+                "*",
+              );
             }
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error)
+            const message = error instanceof Error ? error.message : String(error);
             iframe.contentWindow?.postMessage(
               {
-                source: 'summarize-repl',
-                type: 'rpc-result',
+                source: "summarize-repl",
+                type: "rpc-result",
                 requestId: data.requestId,
                 ok: false,
                 error: message,
               },
-              '*'
-            )
+              "*",
+            );
           }
-        }
-        void handle()
-        return
+        };
+        void handle();
+        return;
       }
 
-      if (data.type === 'result' && data.requestId === requestId) {
-        cleanup()
+      if (data.type === "result" && data.requestId === requestId) {
+        cleanup();
         resolve({
           logs: data.logs ?? [],
           files: data.files ?? [],
-          error: data.ok ? undefined : data.error || 'Execution failed',
-        })
+          error: data.ok ? undefined : data.error || "Execution failed",
+        });
       }
-    }
+    };
 
-    window.addEventListener('message', onMessage)
+    window.addEventListener("message", onMessage);
     if (signal) {
       if (signal.aborted) {
-        abortHandler()
-        return
+        abortHandler();
+        return;
       }
-      signal.addEventListener('abort', abortHandler, { once: true })
+      signal.addEventListener("abort", abortHandler, { once: true });
     }
 
-    iframe.addEventListener('load', sendExecute, { once: true })
-    document.body.appendChild(iframe)
-  })
+    iframe.addEventListener("load", sendExecute, { once: true });
+    document.body.appendChild(iframe);
+  });
 }
 
 export async function executeReplTool(args: ReplArgs): Promise<ReplResult> {
-  if (!args.code?.trim()) throw new Error('Missing code')
-  validateReplCode(args.code)
-  ensureReplAbortListener()
+  if (!args.code?.trim()) throw new Error("Missing code");
+  validateReplCode(args.code);
+  ensureReplAbortListener();
 
-  const usesBrowserJs = args.code.includes('browserjs(')
-  let overlayTabId: number | null = null
-  const abortController = new AbortController()
-  activeAbortController = abortController
+  const usesBrowserJs = args.code.includes("browserjs(");
+  let overlayTabId: number | null = null;
+  const abortController = new AbortController();
+  activeAbortController = abortController;
   if (usesBrowserJs) {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.id) {
-      overlayTabId = tab.id
-      await sendReplOverlay(overlayTabId, 'show', args.title || 'Running automation')
+      overlayTabId = tab.id;
+      await sendReplOverlay(overlayTabId, "show", args.title || "Running automation");
     }
   }
 
@@ -717,95 +718,95 @@ export async function executeReplTool(args: ReplArgs): Promise<ReplResult> {
       args.code,
       {
         onBrowserJs: async ({ fnSource, args: fnArgs }) => {
-          const res = await runBrowserJs(fnSource, fnArgs, abortController.signal)
-          if (!res.ok) throw new Error(res.error || 'browserjs failed')
+          const res = await runBrowserJs(fnSource, fnArgs, abortController.signal);
+          if (!res.ok) throw new Error(res.error || "browserjs failed");
           if (res.logs?.length) {
-            return { value: res.value, __browserLogs: res.logs }
+            return { value: res.value, __browserLogs: res.logs };
           }
-          return res.value
+          return res.value;
         },
         onNavigate: async (input) => executeNavigateTool(input),
         onArtifacts: async (payload) => {
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-          if (!tab?.id) throw new Error('No active tab')
-          const tabId = tab.id
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (!tab?.id) throw new Error("No active tab");
+          const tabId = tab.id;
 
-          if (payload.action === 'list') {
-            const records = await listArtifacts(tabId)
+          if (payload.action === "list") {
+            const records = await listArtifacts(tabId);
             return records.map(({ fileName, mimeType, size, updatedAt }) => ({
               fileName,
               mimeType,
               size,
               updatedAt,
-            }))
+            }));
           }
 
-          if (payload.action === 'get') {
-            if (!payload.fileName) throw new Error('Missing fileName')
-            const record = await getArtifactRecord(tabId, payload.fileName)
-            if (!record) throw new Error(`Artifact not found: ${payload.fileName}`)
+          if (payload.action === "get") {
+            if (!payload.fileName) throw new Error("Missing fileName");
+            const record = await getArtifactRecord(tabId, payload.fileName);
+            if (!record) throw new Error(`Artifact not found: ${payload.fileName}`);
             if (payload.asBase64) {
-              return record
+              return record;
             }
             const isText =
-              record.mimeType.startsWith('text/') ||
-              record.mimeType === 'application/json' ||
-              record.fileName.endsWith('.json')
-            return isText ? parseArtifact(record) : record
+              record.mimeType.startsWith("text/") ||
+              record.mimeType === "application/json" ||
+              record.fileName.endsWith(".json");
+            return isText ? parseArtifact(record) : record;
           }
 
-          if (payload.action === 'upsert') {
-            if (!payload.fileName) throw new Error('Missing fileName')
+          if (payload.action === "upsert") {
+            if (!payload.fileName) throw new Error("Missing fileName");
             const record = await upsertArtifact(tabId, {
               fileName: payload.fileName,
               content: payload.content,
               mimeType: payload.mimeType,
               contentBase64:
-                typeof payload.content === 'object' &&
+                typeof payload.content === "object" &&
                 payload.content &&
-                'contentBase64' in payload.content
+                "contentBase64" in payload.content
                   ? (payload.content as { contentBase64?: string }).contentBase64
                   : undefined,
-            })
+            });
             return {
               fileName: record.fileName,
               mimeType: record.mimeType,
               size: record.size,
               updatedAt: record.updatedAt,
-            }
+            };
           }
 
-          if (payload.action === 'delete') {
-            if (!payload.fileName) throw new Error('Missing fileName')
-            return { ok: await deleteArtifact(tabId, payload.fileName) }
+          if (payload.action === "delete") {
+            if (!payload.fileName) throw new Error("Missing fileName");
+            return { ok: await deleteArtifact(tabId, payload.fileName) };
           }
 
-          throw new Error(`Unknown artifact action: ${payload.action}`)
+          throw new Error(`Unknown artifact action: ${payload.action}`);
         },
       },
-      abortController.signal
-    )
+      abortController.signal,
+    );
 
-    const logs = sandboxResult.logs ?? []
+    const logs = sandboxResult.logs ?? [];
     if (sandboxResult.files?.length) {
-      logs.push(`[Files returned: ${sandboxResult.files.length}]`)
+      logs.push(`[Files returned: ${sandboxResult.files.length}]`);
       for (const file of sandboxResult.files) {
-        logs.push(`- ${file.fileName} (${file.mimeType})`)
+        logs.push(`- ${file.fileName} (${file.mimeType})`);
       }
     }
     if (sandboxResult.error) {
-      logs.push(`Error: ${sandboxResult.error}`)
+      logs.push(`Error: ${sandboxResult.error}`);
     }
-    const output = logs.join('\n').trim() || 'Code executed successfully (no output)'
+    const output = logs.join("\n").trim() || "Code executed successfully (no output)";
     return {
       output,
       files: sandboxResult.files?.length ? sandboxResult.files : undefined,
-    }
+    };
   } finally {
-    abortController.abort()
-    activeAbortController = null
+    abortController.abort();
+    activeAbortController = null;
     if (overlayTabId) {
-      await sendReplOverlay(overlayTabId, 'hide')
+      await sendReplOverlay(overlayTabId, "hide");
     }
   }
 }
