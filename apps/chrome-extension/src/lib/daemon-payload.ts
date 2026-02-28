@@ -37,7 +37,9 @@ export function buildDaemonRequestBody({
   const autoCliOrder = settings.autoCliOrder?.trim();
   if (autoCliOrder) overrides.autoCliOrder = autoCliOrder;
   const diagnostics = settings.extendedLogging ? { includeContent: true } : null;
+  const useClaudeCli = /^cli\/claude\//i.test(settings.model);
   return {
+    ...(useClaudeCli ? { format: "markdown" } : {}),
     url: extracted.url,
     title: extracted.title,
     text: extracted.text,

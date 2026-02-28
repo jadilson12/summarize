@@ -135,27 +135,58 @@ async function execCliWithInput({
   });
 }
 
-const parseJsonFromOutput = (output: string): unknown | null => {
+function pickBestPayload(
+  items: Iterable<unknown>,
+): { payload: Record<string, unknown>; hasResult: boolean } | null {
+  let best: { payload: Record<string, unknown>; hasResult: boolean } | null = null;
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const payload = item as Record<string, unknown>;
+    const text = extractJsonResultText(payload);
+    if (!text) continue;
+    const hasResult = payload.type === "result" || payload.result !== undefined;
+    if (!best || (hasResult && !best.hasResult)) {
+      best = { payload, hasResult };
+    }
+  }
+  return best;
+}
+
+function parseJsonFromOutput(output: string): unknown | null {
   const trimmed = output.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith("{")) {
+  // Claude CLI 2.x: outputs a JSON array of events on a single line
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
     try {
-      return JSON.parse(trimmed) as unknown;
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (Array.isArray(parsed)) {
+        return pickBestPayload(parsed)?.payload ?? null;
+      }
+      if (parsed && typeof parsed === "object") {
+        const payload = parsed as Record<string, unknown>;
+        if (extractJsonResultText(payload)) return payload;
+      }
     } catch {
-      // fall through
+      // fall through to line-by-line (JSONL) parsing
     }
   }
-  const lastBraceIndex = trimmed.lastIndexOf("\n{");
-  if (lastBraceIndex >= 0) {
-    const candidate = trimmed.slice(lastBraceIndex + 1).trim();
-    try {
-      return JSON.parse(candidate) as unknown;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-};
+  // JSONL: one JSON object per line
+  const lines = trimmed.split(/\r?\n/);
+  const best = pickBestPayload(
+    (function* () {
+      for (const line of lines) {
+        const candidate = line.trim();
+        if (!candidate.startsWith("{")) continue;
+        try {
+          yield JSON.parse(candidate);
+        } catch {
+          // skip malformed lines
+        }
+      }
+    })(),
+  );
+  return best?.payload ?? null;
+}
 
 const toNumber = (value: unknown): number | null => {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -286,6 +317,26 @@ function extractJsonResultText(payload: Record<string, unknown>): string | null 
     const value = payload[key];
     if (typeof value === "string" && value.trim().length > 0) {
       return value.trim();
+    }
+  }
+  // Claude CLI / pi-ai: assistant.content[].text (só markdown, ignora JSON)
+  const assistant = payload.assistant;
+  if (assistant && typeof assistant === "object") {
+    const content = (assistant as Record<string, unknown>).content;
+    if (Array.isArray(content)) {
+      const parts: string[] = [];
+      for (const block of content) {
+        if (block && typeof block === "object") {
+          const blockObj = block as Record<string, unknown>;
+          if (blockObj.type === "text") {
+            const text = blockObj.text;
+            if (typeof text === "string" && text.trim().length > 0) {
+              parts.push(text.trim());
+            }
+          }
+        }
+      }
+      if (parts.length > 0) return parts.join("\n");
     }
   }
   return null;
