@@ -604,6 +604,7 @@ const languagePresets = [
   "fr",
   "it",
   "pt",
+  "pt-br",
   "nl",
   "sv",
   "no",

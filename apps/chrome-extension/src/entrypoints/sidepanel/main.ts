@@ -1,9 +1,15 @@
-import type { AssistantMessage, Message, ToolCall, ToolResultMessage } from "@mariozechner/pi-ai";
-import { extractYouTubeVideoId, shouldPreferUrlMode } from "@steipete/summarize-core/content/url";
+import type {
+  AssistantMessage,
+  Message,
+  ToolCall,
+  ToolResultMessage,
+} from "@mariozechner/pi-ai";
+import {
+  extractYouTubeVideoId,
+  shouldPreferUrlMode,
+} from "@steipete/summarize-core/content/url";
 import { SUMMARY_LENGTH_SPECS } from "@steipete/summarize-core/prompts";
 import MarkdownIt from "markdown-it";
-import type { SummaryLength } from "../../../../../src/shared/contracts.js";
-import type { ChatMessage, PanelPhase, PanelState, RunStart, UiState } from "./types";
 import {
   buildSlideTextFallback,
   coerceSummaryWithSlides,
@@ -14,9 +20,16 @@ import {
   splitSlideTitleFromText,
   splitSummaryFromSlides,
 } from "../../../../../src/run/flows/url/slides-text.js";
-import { parseSseEvent, type SseSlidesData } from "../../../../../src/shared/sse-events.js";
+import type { SummaryLength } from "../../../../../src/shared/contracts.js";
+import {
+  parseSseEvent,
+  type SseSlidesData,
+} from "../../../../../src/shared/sse-events.js";
 import { listSkills } from "../../automation/skills-store";
-import { executeToolCall, getAutomationToolNames } from "../../automation/tools";
+import {
+  executeToolCall,
+  getAutomationToolNames,
+} from "../../automation/tools";
 import { readPresetOrCustomValue } from "../../lib/combo";
 import { buildIdleSubtitle } from "../../lib/header";
 import { buildMetricsParts, buildMetricsTokens } from "../../lib/metrics";
@@ -34,7 +47,10 @@ import { ChatController } from "./chat-controller";
 import { type ChatHistoryLimits, compactChatHistory } from "./chat-state";
 import { createErrorController } from "./error-controller";
 import { createHeaderController } from "./header-controller";
-import { createPanelCacheController, type PanelCachePayload } from "./panel-cache";
+import {
+  createPanelCacheController,
+  type PanelCachePayload,
+} from "./panel-cache";
 import {
   mountSidepanelLengthPicker,
   mountSidepanelPickers,
@@ -43,6 +59,13 @@ import {
 import { createSlideImageLoader, normalizeSlideImageUrl } from "./slide-images";
 import { createSlidesHydrator } from "./slides-hydrator";
 import { createStreamController } from "./stream-controller";
+import type {
+  ChatMessage,
+  PanelPhase,
+  PanelState,
+  RunStart,
+  UiState,
+} from "./types";
 
 type PanelToBg =
   | { type: "panel:ready" }
@@ -75,8 +98,20 @@ type BgToPanel =
   | { type: "ui:status"; status: string }
   | { type: "run:start"; run: RunStart }
   | { type: "run:error"; message: string }
-  | { type: "slides:run"; ok: boolean; runId?: string; url?: string; error?: string }
-  | { type: "chat:history"; requestId: string; ok: boolean; messages?: Message[]; error?: string }
+  | {
+      type: "slides:run";
+      ok: boolean;
+      runId?: string;
+      url?: string;
+      error?: string;
+    }
+  | {
+      type: "chat:history";
+      requestId: string;
+      ok: boolean;
+      messages?: Message[];
+      error?: string;
+    }
   | { type: "agent:chunk"; requestId: string; text: string }
   | {
       type: "agent:response";
@@ -92,7 +127,12 @@ type BgToPanel =
       transcriptTimedText?: string | null;
       error?: string;
     }
-  | { type: "ui:cache"; requestId: string; ok: boolean; cache?: PanelCachePayload };
+  | {
+      type: "ui:cache";
+      requestId: string;
+      ok: boolean;
+      cache?: PanelCachePayload;
+    };
 
 let panelPort: chrome.runtime.Port | null = null;
 let panelPortConnecting: Promise<chrome.runtime.Port | null> | null = null;
@@ -116,8 +156,9 @@ async function ensurePanelPort(): Promise<chrome.runtime.Port | null> {
     if (typeof windowId !== "number") return null;
     const port = chrome.runtime.connect({ name: `sidepanel:${windowId}` });
     panelPort = port;
-    (window as unknown as { __summarizePanelPort?: chrome.runtime.Port }).__summarizePanelPort =
-      port;
+    (
+      window as unknown as { __summarizePanelPort?: chrome.runtime.Port }
+    ).__summarizePanelPort = port;
     port.onMessage.addListener((msg) => {
       handleBgMessage(msg as BgToPanel);
     });
@@ -125,8 +166,9 @@ async function ensurePanelPort(): Promise<chrome.runtime.Port | null> {
       if (panelPort !== port) return;
       panelPort = null;
       panelPortConnecting = null;
-      (window as unknown as { __summarizePanelPort?: chrome.runtime.Port }).__summarizePanelPort =
-        undefined;
+      (
+        window as unknown as { __summarizePanelPort?: chrome.runtime.Port }
+      ).__summarizePanelPort = undefined;
     });
     return port;
   })();
@@ -188,6 +230,7 @@ const modelRefreshBtn = byId<HTMLButtonElement>("modelRefresh");
 const modelStatusEl = byId<HTMLDivElement>("modelStatus");
 const modelRowEl = byId<HTMLDivElement>("modelRow");
 const slidesLayoutEl = byId<HTMLSelectElement>("slidesLayout");
+const summarizeLangEl = byId<HTMLSelectElement>("summarizeLang");
 
 const chatContainerEl = byId<HTMLElement>("chatContainer");
 const chatMessagesEl = byId<HTMLDivElement>("chatMessages");
@@ -196,8 +239,12 @@ const chatSendBtn = byId<HTMLButtonElement>("chatSend");
 const chatContextStatusEl = byId<HTMLDivElement>("chatContextStatus");
 const automationNoticeEl = byId<HTMLDivElement>("automationNotice");
 const automationNoticeTitleEl = byId<HTMLDivElement>("automationNoticeTitle");
-const automationNoticeMessageEl = byId<HTMLDivElement>("automationNoticeMessage");
-const automationNoticeActionBtn = byId<HTMLButtonElement>("automationNoticeAction");
+const automationNoticeMessageEl = byId<HTMLDivElement>(
+  "automationNoticeMessage",
+);
+const automationNoticeActionBtn = byId<HTMLButtonElement>(
+  "automationNoticeAction",
+);
 const chatJumpBtn = byId<HTMLButtonElement>("chatJump");
 const chatQueueEl = byId<HTMLDivElement>("chatQueue");
 const inlineErrorEl = byId<HTMLDivElement>("inlineError");
@@ -310,7 +357,10 @@ let slidesSummaryHadError = false;
 let slidesSummaryComplete = false;
 let slidesSummaryModel: string | null = null;
 let pendingRunForPlannedSlides: RunStart | null = null;
-const pendingSlidesRunsByUrl = new Map<string, { runId: string; url: string }>();
+const pendingSlidesRunsByUrl = new Map<
+  string,
+  { runId: string; url: string }
+>();
 
 const AGENT_NAV_TTL_MS = 20_000;
 type AgentNavigation = { url: string; tabId: number | null; at: number };
@@ -441,7 +491,9 @@ function showAutomationNotice({
       void chrome.runtime.openOptionsPage();
       return;
     }
-    void chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` });
+    void chrome.tabs.create({
+      url: `chrome://extensions/?id=${chrome.runtime.id}`,
+    });
   };
   automationNoticeEl.classList.remove("hidden");
 }
@@ -464,7 +516,11 @@ window.addEventListener("summarize:automation-permissions", (event) => {
   });
 });
 
-type AgentResponse = { ok: boolean; assistant?: AssistantMessage; error?: string };
+type AgentResponse = {
+  ok: boolean;
+  assistant?: AssistantMessage;
+  error?: string;
+};
 const pendingAgentRequests = new Map<
   string,
   {
@@ -474,10 +530,17 @@ const pendingAgentRequests = new Map<
   }
 >();
 
-type ChatHistoryResponse = { ok: boolean; messages?: Message[]; error?: string };
+type ChatHistoryResponse = {
+  ok: boolean;
+  messages?: Message[];
+  error?: string;
+};
 const pendingChatHistoryRequests = new Map<
   string,
-  { resolve: (response: ChatHistoryResponse) => void; reject: (error: Error) => void }
+  {
+    resolve: (response: ChatHistoryResponse) => void;
+    reject: (error: Error) => void;
+  }
 >();
 
 function abortPendingAgentRequests(reason: string) {
@@ -525,7 +588,9 @@ function buildStreamingAssistantMessage(): ChatMessage {
   };
 }
 
-function handleAgentResponse(msg: Extract<BgToPanel, { type: "agent:response" }>) {
+function handleAgentResponse(
+  msg: Extract<BgToPanel, { type: "agent:response" }>,
+) {
   const pending = pendingAgentRequests.get(msg.requestId);
   if (!pending) return;
   pendingAgentRequests.delete(msg.requestId);
@@ -538,7 +603,9 @@ function handleAgentChunk(msg: Extract<BgToPanel, { type: "agent:chunk" }>) {
   pending.onChunk(msg.text);
 }
 
-function handleChatHistoryResponse(msg: Extract<BgToPanel, { type: "chat:history" }>) {
+function handleChatHistoryResponse(
+  msg: Extract<BgToPanel, { type: "chat:history" }>,
+) {
   const pending = pendingChatHistoryRequests.get(msg.requestId);
   if (!pending) return;
   pendingChatHistoryRequests.delete(msg.requestId);
@@ -623,14 +690,19 @@ renderEl.addEventListener("click", (event) => {
   void send({ type: "panel:seek", seconds });
 });
 
-async function handleSummarizeControlChange(value: { mode: "page" | "video"; slides: boolean }) {
+async function handleSummarizeControlChange(value: {
+  mode: "page" | "video";
+  slides: boolean;
+}) {
   const prevSlides = slidesEnabledValue;
   const prevMode = inputMode;
   if (value.slides && !slidesEnabledValue) {
     const tools = await fetchSlideTools(slidesOcrEnabledValue);
     if (!tools.ok) {
       const missing = tools.missing.join(", ");
-      showSlideNotice(`Slide extraction requires ${missing}. Install and restart the daemon.`);
+      showSlideNotice(
+        `Slide extraction requires ${missing}. Install and restart the daemon.`,
+      );
       refreshSummarizeControl();
       return;
     }
@@ -770,7 +842,9 @@ function enqueueChatMessage(input: string): boolean {
   const text = normalizeQueueText(input);
   if (!text) return false;
   if (chatQueue.length >= MAX_CHAT_QUEUE) {
-    headerController.setStatus(`Queue full (${MAX_CHAT_QUEUE}). Remove one to add more.`);
+    headerController.setStatus(
+      `Queue full (${MAX_CHAT_QUEUE}). Remove one to add more.`,
+    );
     return false;
   }
   chatQueue.push({ id: crypto.randomUUID(), text, createdAt: Date.now() });
@@ -789,7 +863,8 @@ function clearQueuedMessages() {
   renderChatQueue();
 }
 
-const isStreaming = () => panelState.phase === "connecting" || panelState.phase === "streaming";
+const isStreaming = () =>
+  panelState.phase === "connecting" || panelState.phase === "streaming";
 
 const optionsTabStorageKey = "summarize:options-tab";
 
@@ -837,7 +912,8 @@ slideNoticeRetryBtn.addEventListener("click", () => {
 
 const setPhase = (phase: PanelPhase, opts?: { error?: string | null }) => {
   panelState.phase = phase;
-  panelState.error = phase === "error" ? (opts?.error ?? panelState.error) : null;
+  panelState.error =
+    phase === "error" ? (opts?.error ?? panelState.error) : null;
   if (phase === "error") {
     const message =
       panelState.error && panelState.error.trim().length > 0
@@ -902,7 +978,10 @@ chatJumpBtn.addEventListener("click", () => {
 
 const updateChatDockHeight = () => {
   const height = chatDockEl.getBoundingClientRect().height;
-  document.documentElement.style.setProperty("--chat-dock-height", `${height}px`);
+  document.documentElement.style.setProperty(
+    "--chat-dock-height",
+    `${height}px`,
+  );
 };
 
 updateChatDockHeight();
@@ -957,10 +1036,18 @@ function isRecentAgentNavigation(tabId: number | null, url: string | null) {
     lastAgentNavigation = null;
     return false;
   }
-  if (tabId != null && lastAgentNavigation.tabId != null && tabId === lastAgentNavigation.tabId) {
+  if (
+    tabId != null &&
+    lastAgentNavigation.tabId != null &&
+    tabId === lastAgentNavigation.tabId
+  ) {
     return true;
   }
-  if (url && lastAgentNavigation.url && urlsMatch(url, lastAgentNavigation.url)) {
+  if (
+    url &&
+    lastAgentNavigation.url &&
+    urlsMatch(url, lastAgentNavigation.url)
+  ) {
     return true;
   }
   return false;
@@ -973,14 +1060,21 @@ function notePreserveChatForUrl(url: string | null) {
 
 function shouldPreserveChatForRun(url: string) {
   const pending = pendingPreserveChatForUrl;
-  if (pending && Date.now() - pending.at < AGENT_NAV_TTL_MS && urlsMatch(url, pending.url)) {
+  if (
+    pending &&
+    Date.now() - pending.at < AGENT_NAV_TTL_MS &&
+    urlsMatch(url, pending.url)
+  ) {
     pendingPreserveChatForUrl = null;
     return true;
   }
   return isRecentAgentNavigation(null, url);
 }
 
-async function migrateChatHistory(fromTabId: number | null, toTabId: number | null) {
+async function migrateChatHistory(
+  fromTabId: number | null,
+  toTabId: number | null,
+) {
   if (!fromTabId || !toTabId || fromTabId === toTabId) return;
   const messages = chatController.getMessages();
   if (messages.length === 0) return;
@@ -1004,9 +1098,12 @@ async function appendNavigationMessage(url: string, title: string | null) {
       ? "Skills: none"
       : `Skills:\n${skills.map((skill) => `- ${skill.name}: ${skill.shortDescription}`).join("\n")}`;
 
-  const text = ["Navigation changed", `Title: ${title || url}`, `URL: ${url}`, skillsText].join(
-    "\n",
-  );
+  const text = [
+    "Navigation changed",
+    `Title: ${title || url}`,
+    `URL: ${url}`,
+    skillsText,
+  ].join("\n");
 
   const message: ToolResultMessage = {
     role: "toolResult",
@@ -1035,7 +1132,10 @@ function canSyncTabUrl(url: string | null | undefined): url is string {
 async function syncWithActiveTab() {
   if (!panelState.currentSource) return;
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
     if (!tab?.url || !canSyncTabUrl(tab.url)) return;
     if (!urlsMatch(tab.url, panelState.currentSource.url)) {
       const preserveChat = isRecentAgentNavigation(tab.id ?? null, tab.url);
@@ -1051,7 +1151,10 @@ async function syncWithActiveTab() {
       return;
     }
     if (tab.title && tab.title !== panelState.currentSource.title) {
-      panelState.currentSource = { ...panelState.currentSource, title: tab.title };
+      panelState.currentSource = {
+        ...panelState.currentSource,
+        title: tab.title,
+      };
       headerController.setBaseTitle(tab.title);
     }
   } catch {
@@ -1133,14 +1236,21 @@ function buildPanelCachePayload(): PanelCachePayload | null {
   };
 }
 
-function applyPanelCache(payload: PanelCachePayload, opts?: { preserveChat?: boolean }) {
+function applyPanelCache(
+  payload: PanelCachePayload,
+  opts?: { preserveChat?: boolean },
+) {
   const preserveChat = opts?.preserveChat ?? false;
   resetSummaryView({ preserveChat });
   panelState.runId = payload.runId ?? null;
   panelState.slidesRunId = payload.slidesRunId ?? payload.runId ?? null;
   currentRunTabId = payload.tabId;
   panelState.currentSource = { url: payload.url, title: payload.title ?? null };
-  panelState.lastMeta = payload.lastMeta ?? { inputSummary: null, model: null, modelLabel: null };
+  panelState.lastMeta = payload.lastMeta ?? {
+    inputSummary: null,
+    model: null,
+    modelLabel: null,
+  };
   panelState.summaryFromCache = payload.summaryFromCache ?? null;
   headerController.setBaseTitle(payload.title || payload.url || "Summarize");
   headerController.setBaseSubtitle(
@@ -1201,19 +1311,25 @@ const panelCacheController = createPanelCacheController({
 
 window.addEventListener("error", (event) => {
   const message =
-    event.error instanceof Error ? event.error.stack || event.error.message : event.message;
+    event.error instanceof Error
+      ? event.error.stack || event.error.message
+      : event.message;
   headerController.setStatus(`Error: ${message}`);
   setPhase("error", { error: message });
 });
 
 window.addEventListener("unhandledrejection", (event) => {
   const reason = (event as PromiseRejectionEvent).reason;
-  const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
+  const message =
+    reason instanceof Error ? reason.stack || reason.message : String(reason);
   headerController.setStatus(`Error: ${message}`);
   setPhase("error", { error: message });
 });
 
-function splitSlidesMarkdown(markdown: string): { summary: string; slides: string | null } {
+function splitSlidesMarkdown(markdown: string): {
+  summary: string;
+  slides: string | null;
+} {
   const { summary, slidesSection } = splitSummaryFromSlides(markdown);
   const slides = slidesSection?.trim() ?? "";
   return { summary, slides: slides.length > 0 ? slides : null };
@@ -1232,9 +1348,12 @@ function renderMarkdownDisplay() {
   const markdown = panelState.summaryMarkdown ?? "";
   const displayMarkdown = selectMarkdownForLayout(markdown);
   try {
-    renderMarkdownHostEl.innerHTML = md.render(linkifyTimestamps(displayMarkdown));
+    renderMarkdownHostEl.innerHTML = md.render(
+      linkifyTimestamps(displayMarkdown),
+    );
   } catch (err) {
-    const message = err instanceof Error ? err.stack || err.message : String(err);
+    const message =
+      err instanceof Error ? err.stack || err.message : String(err);
     headerController.setStatus(`Error: ${message}`);
     return;
   }
@@ -1267,13 +1386,22 @@ function deriveSlideSummaries(markdown: string): {
   titles: Map<number, string>;
 } | null {
   let parsed = parseSlideSummariesFromMarkdown(markdown);
-  const hasMeaningfulSlides = Array.from(parsed.values()).some((text) => text.trim().length > 0);
-  if ((!hasMeaningfulSlides || parsed.size === 0) && panelState.slides?.slides.length) {
+  const hasMeaningfulSlides = Array.from(parsed.values()).some(
+    (text) => text.trim().length > 0,
+  );
+  if (
+    (!hasMeaningfulSlides || parsed.size === 0) &&
+    panelState.slides?.slides.length
+  ) {
     const lengthArg = resolveSlidesLengthArg(pickerSettings.length);
-    const timeline: SlideTimelineEntry[] = panelState.slides.slides.map((slide) => ({
-      index: slide.index,
-      timestamp: Number.isFinite(slide.timestamp) ? slide.timestamp : Number.NaN,
-    }));
+    const timeline: SlideTimelineEntry[] = panelState.slides.slides.map(
+      (slide) => ({
+        index: slide.index,
+        timestamp: Number.isFinite(slide.timestamp)
+          ? slide.timestamp
+          : Number.NaN,
+      }),
+    );
     const coerced = coerceSummaryWithSlides({
       markdown,
       slides: timeline,
@@ -1287,7 +1415,11 @@ function deriveSlideSummaries(markdown: string): {
   const summaries = new Map<number, string>();
   const titles = new Map<number, string>();
   for (const [index, text] of parsed) {
-    const parsedSlide = splitSlideTitleFromText({ text, slideIndex: index, total });
+    const parsedSlide = splitSlideTitleFromText({
+      text,
+      slideIndex: index,
+      total,
+    });
     const title = normalizeSlideText(parsedSlide.title ?? "");
     const body = normalizeSlideText(parsedSlide.body ?? "");
     if (body) summaries.set(index, body);
@@ -1326,7 +1458,9 @@ function updateSlideSummaryFromMarkdown(
 function setSlidesBusy(next: boolean) {
   if (slidesBusy === next) return;
   slidesBusy = next;
-  const toggle = document.querySelector<HTMLButtonElement>(".summarizeSlideToggle");
+  const toggle = document.querySelector<HTMLButtonElement>(
+    ".summarizeSlideToggle",
+  );
   if (toggle) {
     toggle.dataset.busy = next ? "true" : "false";
   }
@@ -1334,7 +1468,9 @@ function setSlidesBusy(next: boolean) {
   refreshSummarizeControl();
 }
 
-function formatSlideTimestamp(seconds: number | null | undefined): string | null {
+function formatSlideTimestamp(
+  seconds: number | null | undefined,
+): string | null {
   if (seconds == null || !Number.isFinite(seconds)) return null;
   const total = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(total / 3600);
@@ -1362,7 +1498,9 @@ const SLIDE_CUSTOM_LENGTH_PATTERN = /^(?<value>\d+(?:\.\d+)?)(?<unit>k|m)?$/i;
 
 function resolveSlidesLengthArg(
   lengthValue: string,
-): { kind: "preset"; preset: SummaryLength } | { kind: "chars"; maxCharacters: number } {
+):
+  | { kind: "preset"; preset: SummaryLength }
+  | { kind: "chars"; maxCharacters: number } {
   const normalized = lengthValue.trim().toLowerCase();
   if (Object.hasOwn(SUMMARY_LENGTH_SPECS, normalized)) {
     return { kind: "preset", preset: normalized as SummaryLength };
@@ -1403,7 +1541,9 @@ function normalizeOcrText(raw: string | null | undefined): string {
   const mixedCaseTokens = letterTokens.filter(
     (token) => /[A-Z]/.test(token) && /[a-z]/.test(token),
   );
-  const hasLongWord = letterTokens.some((token) => token.length >= 5 && /[aeiou]/i.test(token));
+  const hasLongWord = letterTokens.some(
+    (token) => token.length >= 5 && /[aeiou]/i.test(token),
+  );
 
   const chars = Array.from(text);
   const letters = chars.filter((char) => /\p{L}/u.test(char)).length;
@@ -1417,7 +1557,8 @@ function normalizeOcrText(raw: string | null | undefined): string {
   if (
     tokens.length >= SLIDE_OCR_GIBBERISH_MIN_TOKENS &&
     letterTokens.length > 0 &&
-    shortLetterTokens.length / letterTokens.length >= SLIDE_OCR_GIBBERISH_MAX_SHORT_TOKEN_RATIO &&
+    shortLetterTokens.length / letterTokens.length >=
+      SLIDE_OCR_GIBBERISH_MAX_SHORT_TOKEN_RATIO &&
     longWordishTokens.length < 2
   ) {
     return "";
@@ -1452,7 +1593,10 @@ function truncateSlideText(value: string, limit: number): string {
   return result.length > 0 ? `${result}...` : "";
 }
 
-function getOcrTextForSlide(slide: { ocrText?: string | null }, budget: number): string {
+function getOcrTextForSlide(
+  slide: { ocrText?: string | null },
+  budget: number,
+): string {
   const text = normalizeOcrText(slide.ocrText);
   return text ? truncateSlideText(text, budget) : "";
 }
@@ -1468,19 +1612,29 @@ function rebuildSlideDescriptions() {
     }
   }
   const lengthArg = resolveSlidesLengthArg(pickerSettings.length);
-  const timeline: SlideTimelineEntry[] = panelState.slides.slides.map((slide) => ({
-    index: slide.index,
-    timestamp: Number.isFinite(slide.timestamp) ? slide.timestamp : Number.NaN,
-  }));
+  const timeline: SlideTimelineEntry[] = panelState.slides.slides.map(
+    (slide) => ({
+      index: slide.index,
+      timestamp: Number.isFinite(slide.timestamp)
+        ? slide.timestamp
+        : Number.NaN,
+    }),
+  );
   const fallbackSummaries = buildSlideTextFallback({
     slides: timeline,
     transcriptTimedText: slidesTranscriptTimedText,
     lengthArg,
   });
-  const budget = resolveSlideTextBudget({ lengthArg, slideCount: timeline.length });
+  const budget = resolveSlideTextBudget({
+    lengthArg,
+    slideCount: timeline.length,
+  });
   const hasSummary = slideSummaryByIndex.size > 0;
   const allowOcrFallback =
-    !hasSummary && slidesOcrEnabledValue && slidesOcrAvailable && !slidesTranscriptAvailable;
+    !hasSummary &&
+    slidesOcrEnabledValue &&
+    slidesOcrAvailable &&
+    !slidesTranscriptAvailable;
   const effectiveInputMode = inputModeOverride ?? inputMode;
   const holdTranscriptFallback =
     !hasSummary &&
@@ -1512,7 +1666,9 @@ function rebuildSlideDescriptions() {
       slideDescriptions.set(slide.index, getOcrTextForSlide(slide, budget));
       continue;
     }
-    const ocrFallback = allowOcrFallback ? getOcrTextForSlide(slide, budget) : "";
+    const ocrFallback = allowOcrFallback
+      ? getOcrTextForSlide(slide, budget)
+      : "";
     if (holdTranscriptFallback) {
       slideDescriptions.set(slide.index, ocrFallback);
       continue;
@@ -1565,13 +1721,21 @@ function mergeSlidesPayload(
   next: NonNullable<PanelState["slides"]>,
 ): NonNullable<PanelState["slides"]> {
   if (prev.sourceId !== next.sourceId) return next;
-  const mergedByIndex = new Map<number, NonNullable<PanelState["slides"]>["slides"][number]>();
+  const mergedByIndex = new Map<
+    number,
+    NonNullable<PanelState["slides"]>["slides"][number]
+  >();
   for (const slide of prev.slides) mergedByIndex.set(slide.index, slide);
   for (const slide of next.slides) {
     const existing = mergedByIndex.get(slide.index);
-    mergedByIndex.set(slide.index, existing ? { ...existing, ...slide } : slide);
+    mergedByIndex.set(
+      slide.index,
+      existing ? { ...existing, ...slide } : slide,
+    );
   }
-  const mergedSlides = Array.from(mergedByIndex.values()).sort((a, b) => a.index - b.index);
+  const mergedSlides = Array.from(mergedByIndex.values()).sort(
+    (a, b) => a.index - b.index,
+  );
   return {
     ...prev,
     ...next,
@@ -1593,7 +1757,8 @@ function slidesPayloadChanged(
     if (current.timestamp !== prior.timestamp) return true;
     if (current.imageUrl !== prior.imageUrl) return true;
     if ((current.ocrText ?? null) !== (prior.ocrText ?? null)) return true;
-    if ((current.ocrConfidence ?? null) !== (prior.ocrConfidence ?? null)) return true;
+    if ((current.ocrConfidence ?? null) !== (prior.ocrConfidence ?? null))
+      return true;
   }
   if (next.ocrAvailable !== prev.ocrAvailable) return true;
   return false;
@@ -1624,7 +1789,9 @@ function updateSlideMeta(
 ) {
   const formatted = formatSlideTimestamp(timestamp);
   const totalCount = typeof total === "number" && total > 0 ? total : null;
-  const slideLabel = totalCount ? `Slide ${index}/${totalCount}` : `Slide ${index}`;
+  const slideLabel = totalCount
+    ? `Slide ${index}/${totalCount}`
+    : `Slide ${index}`;
   if (title) {
     el.textContent = formatted ? `${title} · ${formatted}` : title;
     return;
@@ -1643,12 +1810,18 @@ function bindSlideSeek(el: HTMLElement, timestamp: number | null | undefined) {
 }
 
 function applySlidesPayload(data: SseSlidesData) {
-  const isSameSource = Boolean(panelState.slides && panelState.slides.sourceId === data.sourceId);
+  const isSameSource = Boolean(
+    panelState.slides && panelState.slides.sourceId === data.sourceId,
+  );
   const normalized: SseSlidesData = {
     ...data,
     slides: data.slides.map((slide) => ({
       ...slide,
-      imageUrl: normalizeSlideImageUrl(slide.imageUrl, data.sourceId, slide.index),
+      imageUrl: normalizeSlideImageUrl(
+        slide.imageUrl,
+        data.sourceId,
+        slide.index,
+      ),
     })),
   };
   const shouldReplaceSeeded = slidesSeededSourceId === data.sourceId;
@@ -1686,14 +1859,28 @@ const slidesTestHooks = (
       getSlideDescriptions?: () => Array<[number, string]>;
       getPhase?: () => PanelPhase;
       getModel?: () => string | null;
-      getSlidesTimeline?: () => Array<{ index: number; timestamp: number | null }>;
+      getSlidesTimeline?: () => Array<{
+        index: number;
+        timestamp: number | null;
+      }>;
       getTranscriptTimedText?: () => string | null;
       getSlidesSummaryMarkdown?: () => string;
       getSlidesSummaryComplete?: () => boolean;
       getSlidesSummaryModel?: () => string | null;
-      setSummarizeMode?: (payload: { mode: "page" | "video"; slides: boolean }) => Promise<void>;
-      getSummarizeMode?: () => { mode: "page" | "video"; slides: boolean; mediaAvailable: boolean };
-      getSlidesState?: () => { slidesCount: number; layout: SlidesLayout; hasSlides: boolean };
+      setSummarizeMode?: (payload: {
+        mode: "page" | "video";
+        slides: boolean;
+      }) => Promise<void>;
+      getSummarizeMode?: () => {
+        mode: "page" | "video";
+        slides: boolean;
+        mediaAvailable: boolean;
+      };
+      getSlidesState?: () => {
+        slidesCount: number;
+        layout: SlidesLayout;
+        hasSlides: boolean;
+      };
       renderSlidesNow?: () => void;
       applyUiState?: (state: UiState) => void;
       forceRenderSlides?: () => void;
@@ -1707,7 +1894,8 @@ if (slidesTestHooks) {
   slidesTestHooks.applySlidesPayload = applySlidesPayload;
   slidesTestHooks.getRunId = () => panelState.runId;
   slidesTestHooks.getSummaryMarkdown = () => panelState.summaryMarkdown ?? "";
-  slidesTestHooks.getSlideDescriptions = () => Array.from(slideDescriptions.entries());
+  slidesTestHooks.getSlideDescriptions = () =>
+    Array.from(slideDescriptions.entries());
   slidesTestHooks.getPhase = () => panelState.phase;
   slidesTestHooks.getModel = () => panelState.lastMeta.model ?? null;
   slidesTestHooks.getSlidesTimeline = () =>
@@ -1754,19 +1942,26 @@ if (slidesTestHooks) {
   slidesTestHooks.showInlineError = (message) => {
     errorController.showInlineError(message);
   };
-  slidesTestHooks.isInlineErrorVisible = () => !inlineErrorEl.classList.contains("hidden");
-  slidesTestHooks.getInlineErrorMessage = () => inlineErrorMessageEl.textContent ?? "";
+  slidesTestHooks.isInlineErrorVisible = () =>
+    !inlineErrorEl.classList.contains("hidden");
+  slidesTestHooks.getInlineErrorMessage = () =>
+    inlineErrorMessageEl.textContent ?? "";
 }
 
 async function requestSlidesContext() {
   if (!panelState.slides || slidesContextPending) return;
-  const sourceUrl = panelState.slides.sourceUrl || panelState.currentSource?.url || null;
+  const sourceUrl =
+    panelState.slides.sourceUrl || panelState.currentSource?.url || null;
   if (sourceUrl && slidesContextUrl === sourceUrl) return;
   slidesContextPending = true;
   slidesContextRequestId += 1;
   const requestId = `slides-${slidesContextRequestId}`;
   slidesContextUrl = sourceUrl;
-  void send({ type: "panel:slides-context", requestId, url: sourceUrl ?? undefined });
+  void send({
+    type: "panel:slides-context",
+    requestId,
+    url: sourceUrl ?? undefined,
+  });
 }
 
 const MAX_SLIDE_STRIP = 12;
@@ -1835,7 +2030,9 @@ function renderSlideStrip(container: HTMLElement) {
     rebuildSlideDescriptions();
   }
   const allSlides = panelState.slides.slides;
-  const slides = slidesExpanded ? allSlides : allSlides.slice(0, MAX_SLIDE_STRIP);
+  const slides = slidesExpanded
+    ? allSlides
+    : allSlides.slice(0, MAX_SLIDE_STRIP);
   if (allSlides.length === 0 || slides.length === 0) {
     clearSlideStrip(container);
     return;
@@ -1903,7 +2100,9 @@ function renderSlideStrip(container: HTMLElement) {
   }
 
   const existingButtons = new Map<number, HTMLButtonElement>();
-  for (const button of Array.from(grid.querySelectorAll<HTMLButtonElement>(".slideStrip__item"))) {
+  for (const button of Array.from(
+    grid.querySelectorAll<HTMLButtonElement>(".slideStrip__item"),
+  )) {
     const idxRaw = button.dataset.slideIndex;
     const idx = idxRaw ? Number(idxRaw) : Number.NaN;
     if (!Number.isFinite(idx)) continue;
@@ -1943,14 +2142,23 @@ function renderSlideStrip(container: HTMLElement) {
     }
 
     const thumb = button.querySelector<HTMLDivElement>(".slideStrip__thumb");
-    const img = button.querySelector<HTMLImageElement>("img.slideStrip__thumbImage");
+    const img = button.querySelector<HTMLImageElement>(
+      "img.slideStrip__thumbImage",
+    );
     const meta = button.querySelector<HTMLDivElement>(".slideStrip__meta");
     if (!thumb || !img || !meta) continue;
 
     updateSlideThumb(img, thumb, slide.imageUrl);
-    updateSlideMeta(meta, idx, slide.timestamp, slideTitleByIndex.get(idx) ?? null, slides.length);
+    updateSlideMeta(
+      meta,
+      idx,
+      slide.timestamp,
+      slideTitleByIndex.get(idx) ?? null,
+      slides.length,
+    );
 
-    const existingText = button.querySelector<HTMLDivElement>(".slideStrip__text");
+    const existingText =
+      button.querySelector<HTMLDivElement>(".slideStrip__text");
     if (slidesExpanded) {
       if (!existingText) {
         const description = document.createElement("div");
@@ -2017,7 +2225,9 @@ function renderSlideGallery(container: HTMLElement) {
   title.textContent = `Slides (${slides.length})`;
 
   const existingItems = new Map<number, HTMLElement>();
-  for (const item of Array.from(list.querySelectorAll<HTMLElement>(".slideGallery__item"))) {
+  for (const item of Array.from(
+    list.querySelectorAll<HTMLElement>(".slideGallery__item"),
+  )) {
     const idxRaw = item.dataset.slideIndex;
     const idx = idxRaw ? Number(idxRaw) : Number.NaN;
     if (!Number.isFinite(idx)) continue;
@@ -2065,14 +2275,22 @@ function renderSlideGallery(container: HTMLElement) {
     }
 
     const media = item.querySelector<HTMLDivElement>(".slideGallery__media");
-    const img = item.querySelector<HTMLImageElement>("img.slideInline__thumbImage");
+    const img = item.querySelector<HTMLImageElement>(
+      "img.slideInline__thumbImage",
+    );
     const thumb = item.querySelector<HTMLDivElement>(".slideGallery__thumb");
     const meta = item.querySelector<HTMLDivElement>(".slideGallery__meta");
     const text = item.querySelector<HTMLDivElement>(".slideGallery__text");
     if (!media || !img || !thumb || !meta || !text) continue;
 
     updateSlideThumb(img, thumb, slide.imageUrl);
-    updateSlideMeta(meta, idx, slide.timestamp, slideTitleByIndex.get(idx) ?? null, slides.length);
+    updateSlideMeta(
+      meta,
+      idx,
+      slide.timestamp,
+      slideTitleByIndex.get(idx) ?? null,
+      slides.length,
+    );
     text.textContent = slideDescriptions.get(idx) ?? "";
 
     bindSlideSeek(item, slide.timestamp);
@@ -2081,13 +2299,18 @@ function renderSlideGallery(container: HTMLElement) {
 }
 
 function stripSlidePlaceholders(container: HTMLElement) {
-  const placeholders = Array.from(container.querySelectorAll("span.slideInline"));
+  const placeholders = Array.from(
+    container.querySelectorAll("span.slideInline"),
+  );
   for (const placeholder of placeholders) {
     placeholder.remove();
   }
 }
 
-function renderInlineSlides(container: HTMLElement, opts?: { fallback?: boolean }) {
+function renderInlineSlides(
+  container: HTMLElement,
+  opts?: { fallback?: boolean },
+) {
   const isSummary = container === renderMarkdownHostEl;
   if (isSummary) {
     stripSlidePlaceholders(container);
@@ -2098,9 +2321,13 @@ function renderInlineSlides(container: HTMLElement, opts?: { fallback?: boolean 
     if (opts?.fallback) clearSlideStrip(renderSlidesHostEl);
     return;
   }
-  const slidesByIndex = new Map(panelState.slides.slides.map((slide) => [slide.index, slide]));
+  const slidesByIndex = new Map(
+    panelState.slides.slides.map((slide) => [slide.index, slide]),
+  );
   const slideTotal = panelState.slides.slides.length || slidesByIndex.size;
-  const placeholders = Array.from(container.querySelectorAll("span.slideInline"));
+  const placeholders = Array.from(
+    container.querySelectorAll("span.slideInline"),
+  );
   let replacedCount = 0;
   for (const placeholder of placeholders) {
     const indexAttr = placeholder.getAttribute("data-slide-index");
@@ -2142,7 +2369,10 @@ function renderInlineSlides(container: HTMLElement, opts?: { fallback?: boolean 
   }
 }
 
-function getLineHeightPx(el: HTMLElement, styles?: CSSStyleDeclaration): number {
+function getLineHeightPx(
+  el: HTMLElement,
+  styles?: CSSStyleDeclaration,
+): number {
   const resolved = styles ?? getComputedStyle(el);
   const lineHeightRaw = resolved.lineHeight;
   const fontSize = Number.parseFloat(resolved.fontSize) || 0;
@@ -2379,7 +2609,11 @@ function setActiveMetricsMode(mode: MetricsMode) {
   renderMetricsMode(mode);
 }
 
-function applyTypography(fontFamily: string, fontSize: number, lineHeight: number) {
+function applyTypography(
+  fontFamily: string,
+  fontSize: number,
+  lineHeight: number,
+) {
   document.documentElement.style.setProperty("--font-body", fontFamily);
   document.documentElement.style.setProperty("--font-size", `${fontSize}px`);
   document.documentElement.style.setProperty("--line-height", `${lineHeight}`);
@@ -2433,14 +2667,22 @@ const pickerHandlers = {
   onSchemeChange: (value) => {
     void (async () => {
       const next = await patchSettings({ colorScheme: value });
-      pickerSettings = { ...pickerSettings, scheme: next.colorScheme, mode: next.colorMode };
+      pickerSettings = {
+        ...pickerSettings,
+        scheme: next.colorScheme,
+        mode: next.colorMode,
+      };
       applyTheme({ scheme: next.colorScheme, mode: next.colorMode });
     })();
   },
   onModeChange: (value) => {
     void (async () => {
       const next = await patchSettings({ colorMode: value });
-      pickerSettings = { ...pickerSettings, scheme: next.colorScheme, mode: next.colorMode };
+      pickerSettings = {
+        ...pickerSettings,
+        scheme: next.colorScheme,
+        mode: next.colorMode,
+      };
       applyTheme({ scheme: next.colorScheme, mode: next.colorMode });
     })();
   },
@@ -2513,9 +2755,12 @@ function buildEmptyUsage() {
   };
 }
 
-function normalizeStoredMessage(raw: Record<string, unknown>): ChatMessage | null {
+function normalizeStoredMessage(
+  raw: Record<string, unknown>,
+): ChatMessage | null {
   const role = raw.role;
-  const timestamp = typeof raw.timestamp === "number" ? raw.timestamp : Date.now();
+  const timestamp =
+    typeof raw.timestamp === "number" ? raw.timestamp : Date.now();
   const id = typeof raw.id === "string" ? raw.id : crypto.randomUUID();
 
   if (role === "user") {
@@ -2537,7 +2782,10 @@ function normalizeStoredMessage(raw: Record<string, unknown>): ChatMessage | nul
       api: typeof raw.api === "string" ? raw.api : "openai-completions",
       provider: typeof raw.provider === "string" ? raw.provider : "openai",
       model: typeof raw.model === "string" ? raw.model : "unknown",
-      usage: typeof raw.usage === "object" && raw.usage ? raw.usage : buildEmptyUsage(),
+      usage:
+        typeof raw.usage === "object" && raw.usage
+          ? raw.usage
+          : buildEmptyUsage(),
       stopReason: typeof raw.stopReason === "string" ? raw.stopReason : "stop",
       timestamp,
       id,
@@ -2554,7 +2802,10 @@ function normalizeStoredMessage(raw: Record<string, unknown>): ChatMessage | nul
       ...(raw as Message),
       role: "toolResult",
       content,
-      toolCallId: typeof raw.toolCallId === "string" ? raw.toolCallId : crypto.randomUUID(),
+      toolCallId:
+        typeof raw.toolCallId === "string"
+          ? raw.toolCallId
+          : crypto.randomUUID(),
       toolName: typeof raw.toolName === "string" ? raw.toolName : "tool",
       isError: Boolean(raw.isError),
       timestamp,
@@ -2607,7 +2858,10 @@ async function persistChatHistory() {
   if (!chatEnabledValue) return;
   const tabId = activeTabId;
   if (!tabId) return;
-  const compacted = compactChatHistory(chatController.getMessages(), chatLimits);
+  const compacted = compactChatHistory(
+    chatController.getMessages(),
+    chatLimits,
+  );
   if (compacted.length !== chatController.getMessages().length) {
     chatController.setMessages(compacted, { scroll: false });
   }
@@ -2636,7 +2890,11 @@ async function restoreChatHistory() {
 
   try {
     const response = await requestChatHistory(panelState.summaryMarkdown);
-    if (loadId !== chatHistoryLoadId || !response.ok || !Array.isArray(response.messages)) {
+    if (
+      loadId !== chatHistoryLoadId ||
+      !response.ok ||
+      !Array.isArray(response.messages)
+    ) {
       return;
     }
     const parsed = response.messages
@@ -2655,14 +2913,26 @@ async function restoreChatHistory() {
 type PlatformKind = "mac" | "windows" | "linux" | "other";
 
 function resolvePlatformKind(): PlatformKind {
-  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
-  const raw = (nav.userAgentData?.platform ?? navigator.platform ?? navigator.userAgent ?? "")
+  const nav = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  const raw = (
+    nav.userAgentData?.platform ??
+    navigator.platform ??
+    navigator.userAgent ??
+    ""
+  )
     .toLowerCase()
     .trim();
 
   if (raw.includes("mac")) return "mac";
   if (raw.includes("win")) return "windows";
-  if (raw.includes("linux") || raw.includes("cros") || raw.includes("chrome os")) return "linux";
+  if (
+    raw.includes("linux") ||
+    raw.includes("cros") ||
+    raw.includes("chrome os")
+  )
+    return "linux";
   return "other";
 }
 
@@ -2676,7 +2946,10 @@ function friendlyFetchError(err: unknown, context: string): string {
   return `${context}: ${message}`;
 }
 
-function setModelStatus(text: string, state: "idle" | "running" | "error" | "ok" = "idle") {
+function setModelStatus(
+  text: string,
+  state: "idle" | "running" | "error" | "ok" = "idle",
+) {
   modelStatusEl.textContent = text;
   if (state === "idle") {
     modelStatusEl.removeAttribute("data-state");
@@ -2716,7 +2989,10 @@ function setModelPlaceholderFromDiscovery(discovery: {
     if (p.xai === true) hints.push("xai/…");
     if (p.zai === true) hints.push("zai/…");
   }
-  if (discovery.localModelsSource && typeof discovery.localModelsSource === "object") {
+  if (
+    discovery.localModelsSource &&
+    typeof discovery.localModelsSource === "object"
+  ) {
     hints.push("local: openai/<id>");
   }
   modelCustomEl.placeholder = hints.join(" / ");
@@ -2739,7 +3015,9 @@ function updateModelRowUI() {
 
 function setModelValue(value: string) {
   const next = value.trim() || defaultSettings.model;
-  const optionValues = new Set(Array.from(modelPresetEl.options).map((o) => o.value));
+  const optionValues = new Set(
+    Array.from(modelPresetEl.options).map((o) => o.value),
+  );
   if (optionValues.has(next) && next !== "custom") {
     modelPresetEl.value = next;
     updateModelRowUI();
@@ -2757,15 +3035,23 @@ function captureModelSelection() {
   };
 }
 
-function restoreModelSelection(selection: { presetValue: string; customValue: string }) {
+function restoreModelSelection(selection: {
+  presetValue: string;
+  customValue: string;
+}) {
   if (selection.presetValue === "custom") {
     modelPresetEl.value = "custom";
     updateModelRowUI();
     modelCustomEl.value = selection.customValue;
     return;
   }
-  const optionValues = new Set(Array.from(modelPresetEl.options).map((o) => o.value));
-  if (optionValues.has(selection.presetValue) && selection.presetValue !== "custom") {
+  const optionValues = new Set(
+    Array.from(modelPresetEl.options).map((o) => o.value),
+  );
+  if (
+    optionValues.has(selection.presetValue) &&
+    selection.presetValue !== "custom"
+  ) {
     modelPresetEl.value = selection.presetValue;
     updateModelRowUI();
     return;
@@ -2809,7 +3095,8 @@ async function refreshModelPresets(token: string) {
         if (!item || typeof item !== "object") return null;
         const record = item as { id?: unknown; label?: unknown };
         const id = typeof record.id === "string" ? record.id.trim() : "";
-        const label = typeof record.label === "string" ? record.label.trim() : "";
+        const label =
+          typeof record.label === "string" ? record.label.trim() : "";
         if (!id) return null;
         return { id, label };
       })
@@ -2871,15 +3158,23 @@ async function runRefreshFree() {
       },
       body: JSON.stringify({}),
     });
-    const json = (await res.json()) as { ok?: boolean; id?: string; error?: string };
+    const json = (await res.json()) as {
+      ok?: boolean;
+      id?: string;
+      error?: string;
+    };
     if (!res.ok || !json.ok || !json.id) {
       throw new Error(json.error || `${res.status} ${res.statusText}`);
     }
 
-    const streamRes = await fetch(`http://127.0.0.1:8787/v1/refresh-free/${json.id}/events`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!streamRes.ok) throw new Error(`${streamRes.status} ${streamRes.statusText}`);
+    const streamRes = await fetch(
+      `http://127.0.0.1:8787/v1/refresh-free/${json.id}/events`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!streamRes.ok)
+      throw new Error(`${streamRes.status} ${streamRes.statusText}`);
     if (!streamRes.body) throw new Error("Missing stream body");
 
     for await (const raw of parseSseStream(streamRes.body)) {
@@ -2917,13 +3212,15 @@ function handleSlidesStatus(text: string) {
   if (!trimmed) return;
   if (!/^slides?/i.test(trimmed)) return;
   setSlidesBusy(true);
-  if (panelState.phase === "connecting" || panelState.phase === "streaming") return;
+  if (panelState.phase === "connecting" || panelState.phase === "streaming")
+    return;
   headerController.setStatus(trimmed);
 }
 
 function startSlidesStreamForRunId(runId: string) {
   const effectiveInputMode = inputModeOverride ?? inputMode;
-  const slidesAllowed = slidesEnabledValue || panelState.ui?.settings.slidesEnabled;
+  const slidesAllowed =
+    slidesEnabledValue || panelState.ui?.settings.slidesEnabled;
   if (!slidesAllowed) {
     stopSlidesStream();
     return;
@@ -2947,7 +3244,12 @@ function startSlidesStream(run: RunStart) {
 function applySlidesSummaryMarkdown(markdown: string) {
   if (!markdown.trim()) return;
   const currentUrl = panelState.currentSource?.url ?? activeTabUrl ?? null;
-  if (slidesSummaryUrl && currentUrl && !urlsMatch(slidesSummaryUrl, currentUrl)) return;
+  if (
+    slidesSummaryUrl &&
+    currentUrl &&
+    !urlsMatch(slidesSummaryUrl, currentUrl)
+  )
+    return;
   if (!slidesEnabledValue) {
     slidesSummaryPending = markdown;
     return;
@@ -2960,10 +3262,14 @@ function applySlidesSummaryMarkdown(markdown: string) {
   let output = markdown;
   if (panelState.slides?.slides.length) {
     const lengthArg = resolveSlidesLengthArg(pickerSettings.length);
-    const timeline: SlideTimelineEntry[] = panelState.slides.slides.map((slide) => ({
-      index: slide.index,
-      timestamp: Number.isFinite(slide.timestamp) ? slide.timestamp : Number.NaN,
-    }));
+    const timeline: SlideTimelineEntry[] = panelState.slides.slides.map(
+      (slide) => ({
+        index: slide.index,
+        timestamp: Number.isFinite(slide.timestamp)
+          ? slide.timestamp
+          : Number.NaN,
+      }),
+    );
     output = coerceSummaryWithSlides({
       markdown,
       slides: timeline,
@@ -2971,7 +3277,10 @@ function applySlidesSummaryMarkdown(markdown: string) {
       lengthArg,
     });
   }
-  updateSlideSummaryFromMarkdown(output, { preserveIfEmpty: false, source: "slides" });
+  updateSlideSummaryFromMarkdown(output, {
+    preserveIfEmpty: false,
+    source: "slides",
+  });
   if (!panelState.summaryMarkdown?.trim()) {
     renderMarkdown(output);
   }
@@ -2979,15 +3288,20 @@ function applySlidesSummaryMarkdown(markdown: string) {
 
 function maybeApplyPendingSlidesSummary() {
   if (!slidesSummaryPending) return;
-  if (panelState.phase === "connecting" || panelState.phase === "streaming") return;
+  if (panelState.phase === "connecting" || panelState.phase === "streaming")
+    return;
   const markdown = slidesSummaryPending;
   slidesSummaryPending = null;
   applySlidesSummaryMarkdown(markdown);
 }
 
-function startSlidesSummaryStreamForRunId(runId: string, targetUrl?: string | null) {
+function startSlidesSummaryStreamForRunId(
+  runId: string,
+  targetUrl?: string | null,
+) {
   const effectiveInputMode = inputModeOverride ?? inputMode;
-  const slidesAllowed = slidesEnabledValue || panelState.ui?.settings.slidesEnabled;
+  const slidesAllowed =
+    slidesEnabledValue || panelState.ui?.settings.slidesEnabled;
   if (!slidesAllowed) {
     stopSlidesSummaryStream();
     return;
@@ -3004,7 +3318,8 @@ function startSlidesSummaryStreamForRunId(runId: string, targetUrl?: string | nu
   slidesSummaryMarkdown = "";
   slidesSummaryHadError = false;
   slidesSummaryComplete = false;
-  slidesSummaryModel = panelState.lastMeta.model ?? panelState.ui?.settings.model ?? "auto";
+  slidesSummaryModel =
+    panelState.lastMeta.model ?? panelState.ui?.settings.model ?? "auto";
   const url = targetUrl ?? panelState.currentSource?.url ?? activeTabUrl ?? "";
   void slidesSummaryController.start({
     id: runId,
@@ -3059,8 +3374,15 @@ const slidesSummaryController = createStreamController({
   onRender: (markdown) => {
     slidesSummaryMarkdown = markdown;
     const effectiveInputMode = inputModeOverride ?? inputMode;
-    if (slidesEnabledValue && effectiveInputMode === "video" && panelState.slides) {
-      updateSlideSummaryFromMarkdown(markdown, { preserveIfEmpty: true, source: "slides" });
+    if (
+      slidesEnabledValue &&
+      effectiveInputMode === "video" &&
+      panelState.slides
+    ) {
+      updateSlideSummaryFromMarkdown(markdown, {
+        preserveIfEmpty: true,
+        source: "slides",
+      });
       if (panelState.summaryMarkdown) {
         renderInlineSlides(renderMarkdownHostEl, { fallback: true });
       }
@@ -3071,7 +3393,8 @@ const slidesSummaryController = createStreamController({
     slidesSummaryPending = null;
     slidesSummaryHadError = false;
     slidesSummaryComplete = false;
-    slidesSummaryModel = panelState.lastMeta.model ?? panelState.ui?.settings.model ?? "auto";
+    slidesSummaryModel =
+      panelState.lastMeta.model ?? panelState.ui?.settings.model ?? "auto";
   },
   onError: (err) => {
     slidesSummaryHadError = true;
@@ -3138,9 +3461,12 @@ const streamController = createStreamController({
   onRememberUrl: (url) => void send({ type: "panel:rememberUrl", url }),
   onMeta: (data) => {
     panelState.lastMeta = {
-      model: typeof data.model === "string" ? data.model : panelState.lastMeta.model,
+      model:
+        typeof data.model === "string" ? data.model : panelState.lastMeta.model,
       modelLabel:
-        typeof data.modelLabel === "string" ? data.modelLabel : panelState.lastMeta.modelLabel,
+        typeof data.modelLabel === "string"
+          ? data.modelLabel
+          : panelState.lastMeta.modelLabel,
       inputSummary:
         typeof data.inputSummary === "string"
           ? data.inputSummary
@@ -3345,13 +3671,24 @@ function wireSetupButtons({
 
   const flashCopied = () => {
     headerController.setStatus("Copied");
-    setTimeout(() => headerController.setStatus(panelState.ui?.status ?? ""), 800);
+    setTimeout(
+      () => headerController.setStatus(panelState.ui?.status ?? ""),
+      800,
+    );
   };
 
-  const installTitleEl = setupEl.querySelector<HTMLElement>("[data-install-title]");
-  const installCodeEl = setupEl.querySelector<HTMLElement>("[data-install-code]");
-  const installHintEl = setupEl.querySelector<HTMLElement>("[data-install-hint]");
-  const installButtons = Array.from(setupEl.querySelectorAll<HTMLButtonElement>("[data-install]"));
+  const installTitleEl = setupEl.querySelector<HTMLElement>(
+    "[data-install-title]",
+  );
+  const installCodeEl = setupEl.querySelector<HTMLElement>(
+    "[data-install-code]",
+  );
+  const installHintEl = setupEl.querySelector<HTMLElement>(
+    "[data-install-hint]",
+  );
+  const installButtons = Array.from(
+    setupEl.querySelectorAll<HTMLButtonElement>("[data-install]"),
+  );
 
   const applyInstallMethod = (method: InstallMethod) => {
     const label = method === "brew" ? "Homebrew" : "NPM";
@@ -3365,7 +3702,8 @@ function wireSetupButtons({
       if (!isMac) {
         installHintEl.textContent = "Homebrew tap is macOS-only.";
       } else if (method === "brew") {
-        installHintEl.textContent = "Homebrew installs the daemon-ready binary (macOS arm64).";
+        installHintEl.textContent =
+          "Homebrew installs the daemon-ready binary (macOS arm64).";
       } else {
         installHintEl.textContent = "NPM installs the CLI (requires Node.js).";
       }
@@ -3388,37 +3726,41 @@ function wireSetupButtons({
     });
   }
 
-  setupEl.querySelectorAll<HTMLButtonElement>("[data-copy]")?.forEach((button) => {
-    button.addEventListener("click", () => {
+  setupEl
+    .querySelectorAll<HTMLButtonElement>("[data-copy]")
+    ?.forEach((button) => {
+      button.addEventListener("click", () => {
+        void (async () => {
+          const copyType = button.dataset.copy;
+          const installMethod = resolveInstallMethod();
+          const payload =
+            copyType === "install"
+              ? installMethod === "brew"
+                ? brewCmd
+                : npmCmd
+              : copyType === "daemon"
+                ? daemonCmd
+                : copyType === "status"
+                  ? "summarize daemon status"
+                  : copyType === "restart"
+                    ? "summarize daemon restart"
+                    : "";
+          if (!payload) return;
+          await navigator.clipboard.writeText(payload);
+          flashCopied();
+        })();
+      });
+    });
+
+  setupEl
+    .querySelector<HTMLButtonElement>("#regen")
+    ?.addEventListener("click", () => {
       void (async () => {
-        const copyType = button.dataset.copy;
-        const installMethod = resolveInstallMethod();
-        const payload =
-          copyType === "install"
-            ? installMethod === "brew"
-              ? brewCmd
-              : npmCmd
-            : copyType === "daemon"
-              ? daemonCmd
-              : copyType === "status"
-                ? "summarize daemon status"
-                : copyType === "restart"
-                  ? "summarize daemon restart"
-                  : "";
-        if (!payload) return;
-        await navigator.clipboard.writeText(payload);
-        flashCopied();
+        const token2 = generateToken();
+        await patchSettings({ token: token2 });
+        renderSetup(token2);
       })();
     });
-  });
-
-  setupEl.querySelector<HTMLButtonElement>("#regen")?.addEventListener("click", () => {
-    void (async () => {
-      const token2 = generateToken();
-      await patchSettings({ token: token2 });
-      renderSetup(token2);
-    })();
-  });
 
   if (!showTroubleshooting) return;
 }
@@ -3428,7 +3770,8 @@ function renderSetup(token: string) {
   setupEl.innerHTML = installStepsHtml({
     token,
     headline: "Setup",
-    message: "Install summarize, then register the daemon so the side panel can stream summaries.",
+    message:
+      "Install summarize, then register the daemon so the side panel can stream summaries.",
   });
   wireSetupButtons({ token });
 }
@@ -3449,7 +3792,8 @@ function maybeShowSetup(state: UiState): boolean {
         ${installStepsHtml({
           token: t,
           headline: "Daemon not reachable",
-          message: state.daemon.error ?? "Check that the LaunchAgent is installed.",
+          message:
+            state.daemon.error ?? "Check that the LaunchAgent is installed.",
           showTroubleshooting: true,
         })}
       `;
@@ -3471,21 +3815,30 @@ function updateControls(state: UiState) {
   const preferUrlMode = nextTabUrl ? shouldPreferUrlMode(nextTabUrl) : false;
   const tabChanged = nextTabId !== activeTabId;
   const urlChanged =
-    !tabChanged && nextTabUrl && (!activeTabUrl || !urlsMatch(nextTabUrl, activeTabUrl));
+    !tabChanged &&
+    nextTabUrl &&
+    (!activeTabUrl || !urlsMatch(nextTabUrl, activeTabUrl));
   const hasActiveChat =
-    panelState.chatStreaming || chatQueue.length > 0 || chatController.getMessages().length > 0;
+    panelState.chatStreaming ||
+    chatQueue.length > 0 ||
+    chatController.getMessages().length > 0;
   const hasMediaInfo = state.media != null;
-  const mediaFromState = Boolean(state.media && (state.media.hasVideo || state.media.hasAudio));
+  const mediaFromState = Boolean(
+    state.media && (state.media.hasVideo || state.media.hasAudio),
+  );
   const nextMediaAvailable = hasMediaInfo
     ? mediaFromState || preferUrlMode
     : tabChanged || urlChanged
       ? preferUrlMode
       : mediaAvailable || preferUrlMode;
-  const nextVideoLabel = state.media?.hasAudio && !state.media.hasVideo ? "Audio" : "Video";
+  const nextVideoLabel =
+    state.media?.hasAudio && !state.media.hasVideo ? "Audio" : "Video";
 
   if (tabChanged) {
-    const initialTabHydration = activeTabId === null && nextTabId !== null && hasActiveChat;
-    const preserveChat = initialTabHydration || isRecentAgentNavigation(nextTabId, nextTabUrl);
+    const initialTabHydration =
+      activeTabId === null && nextTabId !== null && hasActiveChat;
+    const preserveChat =
+      initialTabHydration || isRecentAgentNavigation(nextTabId, nextTabUrl);
     if (preserveChat) {
       notePreserveChatForUrl(nextTabUrl ?? lastAgentNavigation?.url ?? null);
     }
@@ -3521,8 +3874,10 @@ function updateControls(state: UiState) {
   } else if (urlChanged) {
     const previousTabUrl = activeTabUrl;
     activeTabUrl = nextTabUrl;
-    const initialUrlHydration = previousTabUrl === null && nextTabUrl !== null && hasActiveChat;
-    const preserveChat = initialUrlHydration || isRecentAgentNavigation(activeTabId, nextTabUrl);
+    const initialUrlHydration =
+      previousTabUrl === null && nextTabUrl !== null && hasActiveChat;
+    const preserveChat =
+      initialUrlHydration || isRecentAgentNavigation(activeTabId, nextTabUrl);
     if (preserveChat) {
       notePreserveChatForUrl(nextTabUrl);
     } else if (
@@ -3579,8 +3934,12 @@ function updateControls(state: UiState) {
     slidesOcrEnabledValue = nextSlidesOcrEnabled;
     updateSlidesTextState();
   }
-  const fallbackModel = typeof state.settings.model === "string" ? state.settings.model.trim() : "";
-  if (fallbackModel && (!panelState.lastMeta.model || !panelState.lastMeta.model.trim())) {
+  const fallbackModel =
+    typeof state.settings.model === "string" ? state.settings.model.trim() : "";
+  if (
+    fallbackModel &&
+    (!panelState.lastMeta.model || !panelState.lastMeta.model.trim())
+  ) {
     panelState.lastMeta = {
       ...panelState.lastMeta,
       model: fallbackModel,
@@ -3591,7 +3950,10 @@ function updateControls(state: UiState) {
     inputMode = "video";
     inputModeOverride = "video";
   }
-  if (state.settings.slidesLayout && state.settings.slidesLayout !== slidesLayoutValue) {
+  if (
+    state.settings.slidesLayout &&
+    state.settings.slidesLayout !== slidesLayoutValue
+  ) {
     setSlidesLayout(state.settings.slidesLayout);
   }
   if (automationEnabledValue) hideAutomationNotice();
@@ -3601,7 +3963,11 @@ function updateControls(state: UiState) {
     maybeStartPendingSlidesForUrl(nextTabUrl ?? null);
   }
   applyChatEnabled();
-  if (chatEnabledValue && activeTabId && chatController.getMessages().length === 0) {
+  if (
+    chatEnabledValue &&
+    activeTabId &&
+    chatController.getMessages().length === 0
+  ) {
     void restoreChatHistory();
   }
   if (pickerSettings.length !== state.settings.length) {
@@ -3619,7 +3985,11 @@ function updateControls(state: UiState) {
     state.settings.fontSize !== currentFontSize ||
     state.settings.lineHeight !== currentLineHeight
   ) {
-    applyTypography(pickerSettings.fontFamily, state.settings.fontSize, state.settings.lineHeight);
+    applyTypography(
+      pickerSettings.fontFamily,
+      state.settings.fontSize,
+      state.settings.lineHeight,
+    );
     setCurrentFontSize(state.settings.fontSize);
     setCurrentLineHeight(state.settings.lineHeight);
   }
@@ -3629,7 +3999,10 @@ function updateControls(state: UiState) {
   updateModelRowUI();
   modelRefreshBtn.disabled = !state.settings.tokenPresent || refreshFreeRunning;
   if (panelState.currentSource) {
-    if (state.tab.url && !urlsMatch(state.tab.url, panelState.currentSource.url)) {
+    if (
+      state.tab.url &&
+      !urlsMatch(state.tab.url, panelState.currentSource.url)
+    ) {
       const preserveChat = isRecentAgentNavigation(activeTabId, state.tab.url);
       if (preserveChat) {
         notePreserveChatForUrl(state.tab.url);
@@ -3638,14 +4011,22 @@ function updateControls(state: UiState) {
       currentRunTabId = null;
       streamController.abort();
       resetSummaryView({ preserveChat });
-    } else if (state.tab.title && state.tab.title !== panelState.currentSource.title) {
-      panelState.currentSource = { ...panelState.currentSource, title: state.tab.title };
+    } else if (
+      state.tab.title &&
+      state.tab.title !== panelState.currentSource.title
+    ) {
+      panelState.currentSource = {
+        ...panelState.currentSource,
+        title: state.tab.title,
+      };
       headerController.setBaseTitle(state.tab.title);
     }
   }
   if (!panelState.currentSource) {
     panelState.lastMeta = { inputSummary: null, model: null, modelLabel: null };
-    headerController.setBaseTitle(state.tab.title || state.tab.url || "Summarize");
+    headerController.setBaseTitle(
+      state.tab.title || state.tab.url || "Summarize",
+    );
     headerController.setBaseSubtitle("");
   }
   if (!isStreaming()) {
@@ -3682,7 +4063,10 @@ function handleBgMessage(msg: BgToPanel) {
         `Error: ${msg.message && msg.message.trim().length > 0 ? msg.message : "Something went wrong."}`,
       );
       setPhase("error", {
-        error: msg.message && msg.message.trim().length > 0 ? msg.message : "Something went wrong.",
+        error:
+          msg.message && msg.message.trim().length > 0
+            ? msg.message
+            : "Something went wrong.",
       });
       if (panelState.chatStreaming) {
         finishStreamingMessage();
@@ -3700,7 +4084,10 @@ function handleBgMessage(msg: BgToPanel) {
       const targetUrl = msg.url ?? null;
       const currentUrl = panelState.currentSource?.url ?? activeTabUrl ?? null;
       if (targetUrl && currentUrl && !urlsMatch(targetUrl, currentUrl)) {
-        pendingSlidesRunsByUrl.set(normalizeUrl(targetUrl), { runId: msg.runId, url: targetUrl });
+        pendingSlidesRunsByUrl.set(normalizeUrl(targetUrl), {
+          runId: msg.runId,
+          url: targetUrl,
+        });
         return;
       }
       startSlidesStreamForRunId(msg.runId);
@@ -3712,7 +4099,9 @@ function handleBgMessage(msg: BgToPanel) {
       const expectedId = `slides-${slidesContextRequestId}`;
       if (msg.requestId !== expectedId) return;
       slidesContextPending = false;
-      setSlidesTranscriptTimedText(msg.ok ? (msg.transcriptTimedText ?? null) : null);
+      setSlidesTranscriptTimedText(
+        msg.ok ? (msg.transcriptTimedText ?? null) : null,
+      );
       updateSlidesTextState();
       const summarySource =
         slidesSummaryComplete && slidesSummaryMarkdown.trim()
@@ -3722,7 +4111,9 @@ function handleBgMessage(msg: BgToPanel) {
         updateSlideSummaryFromMarkdown(summarySource, {
           preserveIfEmpty: false,
           source:
-            slidesSummaryComplete && slidesSummaryMarkdown.trim().length > 0 ? "slides" : "summary",
+            slidesSummaryComplete && slidesSummaryMarkdown.trim().length > 0
+              ? "slides"
+              : "summary",
         });
         renderInlineSlides(renderMarkdownHostEl, { fallback: true });
       }
@@ -3825,7 +4216,12 @@ function seedPlannedSlidesForRun(run: RunStart) {
   const effectiveInputMode = inputModeOverride ?? inputMode;
   if (effectiveInputMode !== "video") return;
   const durationSeconds = summarizeVideoDurationSeconds;
-  if (!durationSeconds || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
+  if (
+    !durationSeconds ||
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds <= 0
+  )
+    return;
 
   const normalized = pickerSettings.length.trim().toLowerCase();
   const chunkSeconds =
@@ -3858,7 +4254,10 @@ function seedPlannedSlidesForRun(run: RunStart) {
 
   const slides = Array.from({ length: count }, (_, i) => {
     const ratio = count <= 1 ? 0 : i / Math.max(1, count - 1);
-    const timestamp = Math.max(0, Math.min(durationSeconds - 0.1, ratio * durationSeconds));
+    const timestamp = Math.max(
+      0,
+      Math.min(durationSeconds - 0.1, ratio * durationSeconds),
+    );
     const index = i + 1;
     return { index, timestamp, imageUrl: "" };
   });
@@ -3910,7 +4309,8 @@ function parseTimestampHref(href: string): number | null {
 }
 
 function toggleDrawer(force?: boolean, opts?: { animate?: boolean }) {
-  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+  const reducedMotion =
+    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
   const animate = opts?.animate !== false && !reducedMotion;
 
   const isOpen = !drawerEl.classList.contains("hidden");
@@ -3949,7 +4349,11 @@ function toggleDrawer(force?: boolean, opts?: { animate?: boolean }) {
     drawerAnimation = drawerEl.animate(
       [
         { height: "0px", opacity: 0, transform: "translateY(-6px)" },
-        { height: `${targetHeight}px`, opacity: 1, transform: "translateY(0px)" },
+        {
+          height: `${targetHeight}px`,
+          opacity: 1,
+          transform: "translateY(0px)",
+        },
       ],
       { duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" },
     );
@@ -3971,7 +4375,11 @@ function toggleDrawer(force?: boolean, opts?: { animate?: boolean }) {
 
   drawerAnimation = drawerEl.animate(
     [
-      { height: `${currentHeight}px`, opacity: 1, transform: "translateY(0px)" },
+      {
+        height: `${currentHeight}px`,
+        opacity: 1,
+        transform: "translateY(0px)",
+      },
       { height: "0px", opacity: 0, transform: "translateY(-6px)" },
     ],
     { duration: 180, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
@@ -4006,7 +4414,9 @@ function finishStreamingMessage() {
 async function runAgentLoop() {
   let tools = automationEnabledValue ? getAutomationToolNames() : [];
   if (tools.includes("debugger")) {
-    const hasDebugger = await chrome.permissions.contains({ permissions: ["debugger"] });
+    const hasDebugger = await chrome.permissions.contains({
+      permissions: ["debugger"],
+    });
     if (!hasDebugger) {
       tools = tools.filter((tool) => tool !== "debugger");
     }
@@ -4021,12 +4431,17 @@ async function runAgentLoop() {
     scrollToBottom(true);
     let response: AgentResponse;
     try {
-      response = await requestAgent(messages, tools, panelState.summaryMarkdown, {
-        onChunk: (text) => {
-          streamedContent += text;
-          chatController.updateStreamingMessage(streamedContent);
+      response = await requestAgent(
+        messages,
+        tools,
+        panelState.summaryMarkdown,
+        {
+          onChunk: (text) => {
+            streamedContent += text;
+            chatController.updateStreamingMessage(streamedContent);
+          },
         },
-      });
+      );
     } catch (error) {
       chatController.removeMessage(streamingMessage.id);
       if (abortAgentRequested) return;
@@ -4046,7 +4461,9 @@ async function runAgentLoop() {
     chatController.finishStreamingMessage();
     scrollToBottom(true);
 
-    const toolCalls = assistant.content.filter((part) => part.type === "toolCall") as ToolCall[];
+    const toolCalls = assistant.content.filter(
+      (part) => part.type === "toolCall",
+    ) as ToolCall[];
     if (toolCalls.length === 0) break;
 
     for (const call of toolCalls) {
@@ -4072,7 +4489,9 @@ function startChatMessage(text: string) {
   errorController.clearAll();
   abortAgentRequested = false;
 
-  chatController.addMessage(wrapMessage({ role: "user", content: input, timestamp: Date.now() }));
+  chatController.addMessage(
+    wrapMessage({ role: "user", content: input, timestamp: Date.now() }),
+  );
 
   panelState.chatStreaming = true;
   setActiveMetricsMode("chat");
@@ -4236,6 +4655,12 @@ slidesLayoutEl.addEventListener("change", () => {
   })();
 });
 
+summarizeLangEl.addEventListener("change", () => {
+  void (async () => {
+    await patchSettings({ language: summarizeLangEl.value });
+  })();
+});
+
 modelPresetEl.addEventListener("focus", refreshModelsIfStale);
 modelPresetEl.addEventListener("pointerdown", refreshModelsIfStale);
 modelCustomEl.addEventListener("focus", refreshModelsIfStale);
@@ -4257,6 +4682,9 @@ void (async () => {
   automationEnabledValue = s.automationEnabled;
   slidesLayoutValue = s.slidesLayout;
   slidesLayoutEl.value = slidesLayoutValue;
+  // set summarize language — if stored value matches an option use it, else fall back to "auto"
+  summarizeLangEl.value = s.language;
+  if (!summarizeLangEl.value) summarizeLangEl.value = "auto";
   if (!automationEnabledValue) hideAutomationNotice();
   autoToggle.update({
     id: "sidepanel-auto",
@@ -4307,12 +4735,18 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   const nextSettings = changes.settings?.newValue;
   if (!nextSettings || typeof nextSettings !== "object") return;
-  const nextChatEnabled = (nextSettings as { chatEnabled?: unknown }).chatEnabled;
-  if (typeof nextChatEnabled === "boolean" && nextChatEnabled !== chatEnabledValue) {
+  const nextChatEnabled = (nextSettings as { chatEnabled?: unknown })
+    .chatEnabled;
+  if (
+    typeof nextChatEnabled === "boolean" &&
+    nextChatEnabled !== chatEnabledValue
+  ) {
     chatEnabledValue = nextChatEnabled;
     applyChatEnabled();
   }
-  const nextAutomationEnabled = (nextSettings as { automationEnabled?: unknown }).automationEnabled;
+  const nextAutomationEnabled = (
+    nextSettings as { automationEnabled?: unknown }
+  ).automationEnabled;
   if (typeof nextAutomationEnabled === "boolean") {
     automationEnabledValue = nextAutomationEnabled;
     if (!automationEnabledValue) hideAutomationNotice();
@@ -4359,7 +4793,9 @@ window.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement | null;
   if (
     target &&
-    (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable)
   ) {
     return;
   }
